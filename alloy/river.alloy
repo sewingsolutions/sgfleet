@@ -1,0 +1,21 @@
+prometheus.scrape "sgfleet_server" {
+  targets       = [{"__address__" = "sgfleet-server:30000"}]
+  job_name      = "sgfleet_server"
+  scrape_interval = "15s"
+  forward_to    = [prometheus.remote_write.monitoring.receiver]
+}
+
+
+prometheus.scrape "sgfleet_admin" {
+  targets       = [{"__address__" = "sgfleet-admin:8000"}]
+   metrics_path  = "/admin/api/metrics"
+  job_name      = "sgfleet_admin"
+  scrape_interval = "15s"
+  forward_to    = [prometheus.remote_write.monitoring.receiver]
+}
+
+prometheus.remote_write "monitoring" {
+  endpoint {
+    url = "http://${env.PROMETHEUS_HOST}:9090/api/v1/write"
+  }
+}

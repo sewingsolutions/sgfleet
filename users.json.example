@@ -1,0 +1,11 @@
+[
+  {
+    "name": "alice",
+    "rate_limit": 5,
+    "max_concurrent": 3,
+    "request_cost": 0.001,
+    "daily_quota": null,
+    "email": "alice@example.com",
+    "notes": "Example user - delete or modify for production"
+  }
+]

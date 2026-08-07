@@ -1,0 +1,30 @@
+89d0b1f feat: add model health endpoint and status indicators
+16b669c fix: SettingsPage Check now button invalidates health cache
+7b2edac feat: comprehensive logging for auth failures, gateway rejections, upstream errors, admin access, webhook delivery, and startup events
+5f170e1 fix: migration v10 for admin_log table, direct SQLite log persistence, PWA icons and static file serving
+b9d1eae Minor bugs
+6805c28 refactor: remove nginx-exporter (dead weight)
+7e14559 fix route
+d55e51b Remove model dropdown, hardcode sglang-api-model, dynamic profile config
+a3584c4 fix: use --profile flag in compose commands to match project context
+9dfb415 refactor: remove .env update from profile switch
+51acab6 fix: stop+rm+up for clean profile switching
+152935e fix: only stop/start sglang service during profile switch
+252a6dd fix: install docker compose v2 plugin from GitHub releases
+6d80064 fix: install docker compose plugin from GitHub releases
+e5b7b2d fix: add docker-compose-plugin to admin Dockerfile
+320b4fc fix: add docker.io to admin Dockerfile for compose commands
+ea4330e fix: switch_profile now async to work inside FastAPI event loop
+bd45e93 fix: add curl to Dockerfile and entrypoint wait logic
+5efb79b feat: add model profile switching from admin UI
+aa03a6b feat: add entrypoint wait-for-sglang, docker CLI, and ConnectError handling
+84015a1 Failing to start sglang-admin
+51db27c Add .env.example with placeholder values
+9c93590 chore: add .env to .gitignore
+5d1dc71 fix: restore admin/metrics endpoint and add network aliases for multi-model profiles
+38bf9cf chore: restore gemma-specific profile settings lost in conflict resolution
+f1e68f3 fix: restore admin/metrics endpoint and add network aliases for multi-model profiles
+d76c772 gg
+065a9ff Add multi-model profile support for gpt-oss-20b and Gemma 4 31B
+706477a pin sglang image to v0.5.16
+144bd33 feat: structured JSON logging visible via docker logs
