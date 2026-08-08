@@ -27,12 +27,17 @@ Only one model is active at a time. The active model receives the `sgfleet-serve
 ## Quick start
 
 ```bash
-# First run
+# First run — interactive setup
+./init.sh
+
+# Start services
 docker compose up -d
 
 # Open admin dashboard
 # http://<server>:8000/admin/login
 ```
+
+`init.sh` validates repo root, collects `.env` configuration (admin key, model directory, HuggingFace token, Prometheus host), and auto-generates an admin API key. If `.env` already exists, it offers a merge with keep/update/remove per key.
 
 On startup, admin:
 1. Seeds the `models` table from `models.json` (migration v11)
