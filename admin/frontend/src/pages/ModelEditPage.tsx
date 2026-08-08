@@ -211,14 +211,17 @@ function ModelEditForm({ model, isNew, existingModels, onSubmit, onCancel }: {
   const { data: gpuData } = useQuery({ queryKey: ['gpus'], queryFn: api.getGPUs })
   const gpus = useMemo(() => gpuData?.gpus || [], [gpuData])
 
-  const selectedDockerTag = useMemo(() =>
-    isNew && form.image ? form.image : '', [form.image, isNew])
+  const selectedDockerTag = useMemo(() => {
+    if (!isNew || !form.image) return ''
+    const idx = form.image.lastIndexOf(':')
+    return idx >= 0 ? form.image.slice(idx + 1) : form.image
+  }, [form.image, isNew])
   const selectedLocalModel = useMemo(() =>
     isNew && form.modelPath ? form.modelPath : '', [form.modelPath, isNew])
 
   const handleDockerSelect = useCallback((tag: string) => {
     if (tag === '__custom__') return
-    form.setImage(tag)
+    form.setImage(`lmsysorg/sglang:${tag}`)
   }, [form])
 
   const handleLocalModelSelect = useCallback((lm: LocalModel) => {

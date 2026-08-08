@@ -483,8 +483,8 @@ export default function ModelsPage() {
                         </button>
                         <button
                           onClick={() => handleTest(m)}
-                          disabled={testing[m.model_id] || isBusy}
-                          className="px-2 py-1 text-xs rounded transition bg-indigo-100 dark:bg-indigo-900/50 hover:bg-indigo-200 dark:hover:bg-indigo-800 text-indigo-700 dark:text-indigo-300 disabled:opacity-50"
+                          disabled={testing[m.model_id] || isBusy || st !== 'running'}
+                          className="px-2 py-1 text-xs rounded transition bg-indigo-100 dark:bg-indigo-900/50 hover:bg-indigo-200 dark:hover:bg-indigo-800 text-indigo-700 dark:text-indigo-300 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {testing[m.model_id] ? 'Testing…' : 'Test'}
                         </button>

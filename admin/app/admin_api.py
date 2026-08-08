@@ -1037,8 +1037,10 @@ async def update_webhook(request: Request, webhook_id: int):
 
 
 @router.post("/model/test")
-async def test_model(request: Request, model_id: str | None = None):
+async def test_model(request: Request):
     await require_admin(request)
+    body = await request.json()
+    model_id = body.get("model_id")
     if model_id:
         m = await get_model_by_id(model_id)
         if not m:
@@ -1051,7 +1053,6 @@ async def test_model(request: Request, model_id: str | None = None):
         m = active_models[0]
         endpoint = f"http://{m['container_alias']}:{m['port']}"
 
-    body = await request.json()
     payload = body.get(
         "body",
         {

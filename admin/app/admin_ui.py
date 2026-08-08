@@ -20,7 +20,7 @@ _LOGIN_DELAY = 2
 
 def _client_ip(request: Request) -> str:
     xff = request.headers.get("x-forwarded-for", "")
-    return xff.split(",")[0].strip() if xff else (request.client.host or "unknown")
+    return xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
 
 
 def _is_login_rate_limited(ip: str) -> bool:
@@ -48,6 +48,9 @@ async def login_post(request: Request):
 
     form = await request.form()
     key = form.get("key", "")
+    if not isinstance(key, str):
+        _record_login_attempt(ip)
+        return RedirectResponse(url="/admin/login", status_code=303)
 
     async with get_db() as db, db.execute("SELECT value FROM config WHERE key = ?", ("admin_api_key_hash",)) as cursor:
         row = await cursor.fetchone()
@@ -136,6 +139,7 @@ async def admin_home(request: Request):
 @router.get("/admin/models")
 @router.get("/admin/models/new")
 @router.get("/admin/models/download")
+@router.get("/admin/models/{path:path}")
 @router.get("/admin/audit")
 @router.get("/admin/version")
 @router.get("/admin/metrics")
