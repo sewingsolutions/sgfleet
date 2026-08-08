@@ -324,8 +324,13 @@ async def stream_container_logs(container_name: str, tail: int = 500):
     Raises ModelError if the container is not found.
     """
     cmd = [
-        "docker", "logs", "--timestamps", "-f",
-        "--tail", str(tail), container_name,
+        "docker",
+        "logs",
+        "--timestamps",
+        "-f",
+        "--tail",
+        str(tail),
+        container_name,
     ]
     logger.info("Streaming logs: %s", " ".join(cmd))
     proc = await asyncio.create_subprocess_exec(

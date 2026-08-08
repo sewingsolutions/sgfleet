@@ -37,16 +37,20 @@ services:
         max-size: "10m"
         max-file: "3"
     volumes:
-      - ./alloy/river.alloy:/etc/alloy/river.alloy:ro
+      - ./alloy/generate-config.sh:/usr/local/bin/generate-config.sh:ro
+      - alloy_config:/etc/alloy
       - alloy_data:/tmp
     environment:
-      - PROMETHEUS_HOST=${PROMETHEUS_HOST:-YOUR_PROMETHEUS_HOST}
-    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/tmp/alloy /etc/alloy/river.alloy
+      - PROMETHEUS_HOST=${PROMETHEUS_HOST:-}
+    entrypoint: >
+      sh -c "generate-config.sh && exec alloy run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/tmp/alloy /etc/alloy/runtime.alloy"
     depends_on:
       - admin
 volumes:
   admin_db:
     name: sgfleet_admin_db
+  alloy_config:
+    name: sgfleet_alloy_config
   alloy_data:
     name: sgfleet_alloy_data
   switch_status:

@@ -50,7 +50,7 @@ Models are defined in `models.json` and bootstrapped into SQLite on first startu
 - Never manually `docker exec` or restart model containers — use the admin API or UI
 - The admin container has Docker socket access to manage model containers
 - Database is SQLite at Docker volume `admin_db:/data`
-- Metrics flow: admin:8000/admin/metrics → nginx-exporter:4040 → Alloy → external Prometheus at YOUR_PROMETHEUS_HOST:9090
+- Metrics flow: admin:8000/admin/metrics → Alloy → external Prometheus (configured via `PROMETHEUS_HOST` in `.env`)
 - User configs use generic model ID `sgfleet-api-model` — never stale across model switches; admin sees `live_model_id` and `live_model_name` from `/v1/models` for real running model info
 - Health-wait on startup blocks the container start until the model's `/health` returns success (default 600s timeout)
 - Gateway returns 503 JSON when no model is ready, or auto-drops a model from the ready set on DNS failure

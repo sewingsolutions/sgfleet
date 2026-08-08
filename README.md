@@ -7,7 +7,7 @@ Self-hosted LLM inference gateway with multi-model management, auth, rate limiti
 | Service | Port | Description |
 |---------|------|-------------|
 | admin | 8000 | API gateway + admin dashboard + dynamic model orchestration |
-| alloy | 12345 (internal) | Grafana Alloy → external Prometheus at YOUR_PROMETHEUS_HOST:9090 |
+| alloy | 12345 (internal) | Grafana Alloy → external Prometheus (configurable via `PROMETHEUS_HOST`) |
 | sgfleet-* | 30000 (internal) | Model containers, started/stopped dynamically by admin |
 
 ## Models
@@ -56,4 +56,4 @@ cd admin && ./deploy.sh
 
 - **Admin login:** `ADMIN_API_KEY` from `.env`
 - **API access:** `Bearer sk-xxx` header, issued per user via admin dashboard
-- **Grafana:** external instance at YOUR_PROMETHEUS_HOST:9090
+- **Grafana/Prometheus:** external instance (configured via `PROMETHEUS_HOST` in `.env`)
