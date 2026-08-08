@@ -316,6 +316,59 @@ async def get_container_logs(container_name: str, tail: int = 100) -> str:
         return ""
 
 
+async def stream_container_logs(container_name: str, tail: int = 500):
+    """Async generator that streams docker container logs line by line.
+
+    Uses `docker logs --timestamps -f --tail N` for real-time streaming.
+    Yields raw log lines as they arrive from stdout.
+    Raises ModelError if the container is not found.
+    """
+    cmd = [
+        "docker", "logs", "--timestamps", "-f",
+        "--tail", str(tail), container_name,
+    ]
+    logger.info("Streaming logs: %s", " ".join(cmd))
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    # Check stderr for "No such container" errors early
+    stderr_task = None
+    stderr_lines = []
+
+    async def read_stderr():
+        if proc.stderr:
+            async for line in proc.stderr:
+                stderr_lines.append(line.decode(errors="replace"))
+
+    stderr_task = asyncio.create_task(read_stderr())
+
+    try:
+        buffer = ""
+        if proc.stdout:
+            async for chunk in proc.stdout:
+                buffer += chunk.decode(errors="replace")
+                while "\n" in buffer:
+                    line, buffer = buffer.split("\n", 1)
+                    yield line
+        if buffer.strip():
+            yield buffer.strip()
+    finally:
+        if stderr_task:
+            stderr_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await stderr_task
+        proc.terminate()
+        await proc.wait()
+
+        # Check if container was not found
+        stderr_text = "".join(stderr_lines)
+        if "No such container" in stderr_text or "not found" in stderr_text.lower():
+            raise ModelError(f"Container '{container_name}' not found")
+
+
 def _write_status(data: dict) -> None:
     status_file = Path(SWITCH_DIR) / "active_profile.json"
     status_file.write_text(json.dumps(data, indent=2))

@@ -711,6 +711,29 @@ async def set_model_users(request: Request, model_id: str):
     return {"updated": True}
 
 
+@router.get("/models/{model_id}/logs/stream")
+async def stream_model_logs(request: Request, model_id: str, tail: int = 500):
+    await require_admin(request)
+    from fastapi.responses import StreamingResponse
+
+    m = await get_model_by_id(model_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    container_name = m["container_name"]
+    from .docker_manager import ModelError, stream_container_logs
+
+    async def event_generator():
+        try:
+            async for line in stream_container_logs(container_name, tail):
+                yield f"data: {json.dumps({'type': 'line', 'line': line})}\n\n"
+            yield f"data: {json.dumps({'type': 'eof'})}\n\n"
+        except ModelError as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @router.post("/models/export")
 async def export_models(request: Request):
     await require_admin(request)

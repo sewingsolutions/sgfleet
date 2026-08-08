@@ -692,7 +692,7 @@ async def create_model(data: dict) -> dict:
             ),
         )
         await db.commit()
-        return await get_model_by_id(data["model_id"])
+        return await get_model_by_id(data["model_id"])  # type: ignore[return-value]
 
 
 async def update_model(model_id: str, data: dict):
@@ -1070,7 +1070,7 @@ async def create_user(
             (name, hashed, raw_key, quick, rate_limit, max_concurrent, request_cost, daily_quota, email, notes),
         )
         await db.commit()
-        return await get_user_by_name(name)
+        return await get_user_by_name(name)  # type: ignore[return-value]
 
 
 async def update_user(
@@ -1212,11 +1212,11 @@ async def get_user_summary(user_id: int) -> dict:
 
         user = await get_user_by_id(user_id)
         return {
-            "total_requests": all_time[0],
-            "total_cost": round(all_time[1], 4),
+            "total_requests": all_time[0] if all_time else 0,
+            "total_cost": round(all_time[1], 4) if all_time else 0.0,
             "today_requests": today_count,
             "daily_quota": user["daily_quota"] if user else None,
-            "prompt_tokens": all_time[2],
-            "completion_tokens": all_time[3],
-            "total_tokens": all_time[4],
+            "prompt_tokens": all_time[2] if all_time else 0,
+            "completion_tokens": all_time[3] if all_time else 0,
+            "total_tokens": all_time[4] if all_time else 0,
         }

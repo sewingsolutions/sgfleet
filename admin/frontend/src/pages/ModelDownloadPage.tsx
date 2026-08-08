@@ -171,6 +171,7 @@ export default function ModelDownloadPage() {
       }
     }).catch((e) => console.error('[ModelDownloadPage] resume error:', e))
     return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only effect; adding deps would cause unwanted re-runs
   }, [])
 
   // Search models

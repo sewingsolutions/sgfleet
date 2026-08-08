@@ -332,7 +332,7 @@ async def run_download(
         for fp in files_to_download:
             try:
                 info = api.get_paths_info(repo_id=model_id, paths=[fp], repo_type="model", token=token or None)
-                size = info[0].size if info and info[0].size else 0
+                size = getattr(info[0], "size", 0) if info else 0
             except Exception as e:
                 logger.warning("DOWNLOAD get_paths_info failed for %s: %s", fp, e)
                 size = 0

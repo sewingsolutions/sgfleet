@@ -10,6 +10,7 @@ import MetricsPage from './pages/MetricsPage'
 import ModelsPage from './pages/ModelsPage'
 import ModelEditPage from './pages/ModelEditPage'
 import ModelDownloadPage from './pages/ModelDownloadPage'
+import ModelLogsPage from './pages/ModelLogsPage'
 import SettingsPage from './pages/SettingsPage'
 
 import LogsPage from './pages/LogsPage'
@@ -30,6 +31,7 @@ function App() {
             <Route path="/models/download" element={<ProtectedRoute><Layout><ModelDownloadPage /></Layout></ProtectedRoute>} />
             <Route path="/models/new" element={<ProtectedRoute><Layout><ModelEditPage /></Layout></ProtectedRoute>} />
             <Route path="/models/:modelId/edit" element={<ProtectedRoute><Layout><ModelEditPage /></Layout></ProtectedRoute>} />
+            <Route path="/models/:modelId/logs" element={<ProtectedRoute><Layout><ModelLogsPage /></Layout></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Layout><SettingsPage /></Layout></ProtectedRoute>} />
             <Route path="/system" element={<Navigate to="/metrics" replace />} />
             <Route path="/logs" element={<ProtectedRoute><Layout><LogsPage /></Layout></ProtectedRoute>} />

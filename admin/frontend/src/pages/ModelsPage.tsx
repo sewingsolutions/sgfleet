@@ -297,6 +297,7 @@ export default function ModelsPage() {
   }
 
   const openEdit = (m: Model) => navigate(`/models/${encodeURIComponent(m.model_id)}/edit`)
+  const openLogs = (m: Model) => navigate(`/models/${encodeURIComponent(m.model_id)}/logs`)
   const openAdd = () => navigate('/models/new')
   const handleDuplicate = (m: Model) =>
     navigate('/models/new', { state: { duplicateFrom: m.model_id } })
@@ -466,6 +467,13 @@ export default function ModelsPage() {
                           className="px-2 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 disabled:opacity-50"
                         >
                           Edit
+                        </button>
+                        <button
+                          onClick={() => openLogs(m)}
+                          disabled={isBusy}
+                          className="px-2 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 disabled:opacity-50"
+                        >
+                          Logs
                         </button>
                         <button
                           onClick={() => handleDuplicate(m)}

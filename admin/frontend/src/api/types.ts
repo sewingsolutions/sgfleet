@@ -253,6 +253,11 @@ export interface DownloadStatusResponse {
   downloads: DownloadJob[]
 }
 
+export type LogStreamEvent =
+  | { type: 'line'; line: string }
+  | { type: 'eof' }
+  | { type: 'error'; message: string }
+
 export interface DockerImagesResponse {
   images: string[]
   error?: string
