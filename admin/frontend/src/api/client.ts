@@ -1,4 +1,4 @@
-import type { User, Stats, UserSummary, SettingsDefaults, SglModel, ModelConfig, GeneratedConfig, FleetStats, AuditEntry, RequestLogEntry, LogEntry, ModelHealth, Model, DashboardStats, GPUInfo, HFModel, HFSearchResult, DiskUsage } from './types'
+import type { User, Stats, UserSummary, SettingsDefaults, SglModel, ModelConfig, GeneratedConfig, FleetStats, AuditEntry, RequestLogEntry, LogEntry, ModelHealth, Model, DashboardStats, GPUInfo, HFModel, HFSearchResult, DiskUsage, LocalModel, DownloadJob, DockerImagesResponse } from './types'
 
 const apiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
   const res = await fetch(`/admin${path}`, {
@@ -183,9 +183,13 @@ export const api = {
   setHFToken: (token: string) =>
     apiFetch<{ saved: boolean }>('/api/download/hf-token', { method: 'POST', body: JSON.stringify({ token }) }),
   getDiskSpace: () => apiFetch<DiskUsage>('/api/download/disk-space'),
+  listLocalModels: () => apiFetch<LocalModel[]>('/api/download/local-models'),
   checkModelPath: (path: string) => apiFetch<{ exists: boolean }>(`/api/download/path-exists?path=${encodeURIComponent(path)}`),
   cleanupModelPath: (path: string) =>
     apiFetch<{ cleaned: boolean }>('/api/download/cleanup', { method: 'POST', body: JSON.stringify({ path }) }),
   createModelConfig: (data: { hf_model: HFModel; target_dir: string; gpu_indices: number[] }) =>
     apiFetch<{ model_id: string; config: Record<string, unknown> }>('/api/download/model-config', { method: 'POST', body: JSON.stringify(data) }),
+  getDownloadStatus: () =>
+    apiFetch<{ downloads: DownloadJob[] }>('/api/download/status'),
+  getDockerImages: () => apiFetch<DockerImagesResponse>('/api/download/docker-images'),
 }

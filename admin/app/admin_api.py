@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import json
+import logging
 import os
 import secrets
 import tempfile
@@ -61,6 +62,7 @@ from .model_registry import (
     set_ready_ids,
 )
 
+logger = logging.getLogger("sgfleet-admin")
 _startup_time = time.time()
 
 router = APIRouter(prefix="/admin/api")
@@ -516,6 +518,20 @@ async def get_model_config(request: Request, model_id: str | None = None):
     }
 
 
+def _get_dir_size(path: str) -> int | None:
+    if not os.path.isdir(path):
+        return None
+    total = 0
+    try:
+        for dirpath, _, filenames in os.walk(path):
+            for f in filenames:
+                with contextlib.suppress(OSError):
+                    total += os.path.getsize(os.path.join(dirpath, f))
+    except OSError:
+        pass
+    return total
+
+
 @router.get("/models")
 async def list_models_db(request: Request):
     await require_admin(request)
@@ -524,10 +540,12 @@ async def list_models_db(request: Request):
     for m in models:
         status = await get_container_status(m["container_name"])
         container_state = status["state"] if status else "stopped"
+        disk_bytes = _get_dir_size(m.get("model_path", ""))
         result.append(
             {
                 **m,
                 "status": container_state,
+                "disk_bytes": disk_bytes,
             }
         )
     return result
@@ -1207,6 +1225,55 @@ async def update_log_config(request: Request):
     return {"level": level.upper()}
 
 
+# --- Docker Image Tag Endpoint ---
+
+
+@router.get("/download/docker-images")
+async def get_docker_images(request: Request):
+    await require_admin(request)
+    """Fetch SGLang Docker image tags from Docker Hub API."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        # Fetch multiple pages to get past the nightly builds
+        all_items = []
+        url = "https://hub.docker.com/v2/repositories/lmsysorg/sglang/tags/"
+        params = {"page_size": 100}
+        for _ in range(5):
+            if not url:
+                break
+            resp = await client.get(url, params=params)
+            if resp.status_code != 200:
+                return {"images": [], "error": f"Docker Hub API returned {resp.status_code}"}
+            data = resp.json()
+            all_items.extend(data.get("results", []))
+            url = data.get("next")
+            params = None  # next URL includes params
+
+        tags = []
+        seen = set()
+        for item in all_items:
+            name = item.get("name", "")
+            if name in seen:
+                continue
+            seen.add(name)
+            # Only skip nightly date-stamped builds
+            if name.startswith("nightly-"):
+                continue
+            tags.append(name)
+
+        # Sort: stable versions first, then latest, then dev, then others
+        def sort_key(t: str):
+            if t.startswith("v"):
+                return (0, t)
+            if t.startswith("latest"):
+                return (1, t)
+            if t.startswith("dev"):
+                return (2, t)
+            return (3, t)
+
+        tags.sort(key=sort_key)
+        return {"images": tags}
+
+
 # --- HuggingFace Model Download Endpoints ---
 
 
@@ -1256,6 +1323,45 @@ async def search_hf_models_endpoint(
     return await search_hf_models(query=q, max_vram_gb=max_vram_gb, has_token=bool(token), limit=limit)
 
 
+@router.get("/download/local-models")
+async def list_local_models(request: Request):
+    await require_admin(request)
+    from .docker_manager import CONTAINER_MODELS_DIR, CONTAINER_MODELS_DIR_RW
+
+    def scan_dir(base: str) -> list[dict]:
+        results = []
+        if not os.path.isdir(base):
+            return results
+        for entry in sorted(os.listdir(base)):
+            full = os.path.join(base, entry)
+            if not os.path.isdir(full):
+                continue
+            entries = os.listdir(full)
+            has_weights = any(f.endswith(".safetensors") or f.endswith(".bin") for f in entries)
+            has_config = "config.json" in entries
+            if has_weights and has_config:
+                size = _get_dir_size(full) or 0
+                results.append(
+                    {
+                        "name": entry,
+                        "path": full,
+                        "container_path": f"/models/{entry}",
+                        "size_bytes": size,
+                        "size_gb": round(size / (1024**3), 2),
+                        "file_count": sum(1 for f in entries if os.path.isfile(os.path.join(full, f))),
+                    }
+                )
+        return results
+
+    models_rw = scan_dir(CONTAINER_MODELS_DIR_RW)
+    models_ro = scan_dir(CONTAINER_MODELS_DIR)
+    seen = {m["name"] for m in models_rw}
+    for m in models_ro:
+        if m["name"] not in seen:
+            models_rw.append(m)
+    return models_rw
+
+
 @router.get("/download/disk-space")
 async def get_disk_space(request: Request):
     await require_admin(request)
@@ -1267,11 +1373,11 @@ async def get_disk_space(request: Request):
 @router.get("/download/path-exists")
 async def check_model_path(request: Request, path: str):
     await require_admin(request)
-    from .docker_manager import CONTAINER_MODELS_DIR
+    from .docker_manager import CONTAINER_MODELS_DIR_RW
     from .hf_downloader import check_model_path_exists
 
-    real = os.path.realpath(CONTAINER_MODELS_DIR)
-    abs_target = os.path.realpath(os.path.join(CONTAINER_MODELS_DIR, path))
+    real = os.path.realpath(CONTAINER_MODELS_DIR_RW)
+    abs_target = os.path.realpath(os.path.join(CONTAINER_MODELS_DIR_RW, path))
     if not abs_target.startswith(real + os.sep) and abs_target != real:
         raise HTTPException(status_code=400, detail="path must be under MODELS_DIR")
 
@@ -1282,65 +1388,201 @@ async def check_model_path(request: Request, path: str):
 @router.post("/download/cleanup")
 async def cleanup_model_path_endpoint(request: Request):
     await require_admin(request)
-    from .docker_manager import CONTAINER_MODELS_DIR
+    from .docker_manager import CONTAINER_MODELS_DIR_RW
     from .hf_downloader import cleanup_model_path
 
     data = await request.json()
     path = data.get("path", "")
-    real = os.path.realpath(CONTAINER_MODELS_DIR)
-    target = os.path.realpath(os.path.join(CONTAINER_MODELS_DIR, path))
+    real = os.path.realpath(CONTAINER_MODELS_DIR_RW)
+    target = os.path.realpath(os.path.join(CONTAINER_MODELS_DIR_RW, path))
     if not target.startswith(real + os.sep) and target != real:
         raise HTTPException(status_code=400, detail="Path must be under MODELS_DIR")
     cleaned = await cleanup_model_path(target)
     return {"cleaned": cleaned}
 
 
-@router.get("/download/stream")
-async def download_stream(request: Request, model_id: str, target_dir: str):
+@router.get("/download/status")
+async def download_status(request: Request):
+    await require_admin(request)
+    from .download_tracker import list_active
+
+    return {"downloads": list_active()}
+
+
+@router.get("/download/follow")
+async def download_follow(request: Request, target_dir: str):
+    """SSE endpoint that follows an existing download via the tracker (for page resume)."""
     await require_admin(request)
     from fastapi.responses import StreamingResponse
 
-    from .docker_manager import CONTAINER_MODELS_DIR
+    from .download_tracker import get_job
+
+    job = get_job(target_dir)
+    if not job:
+        raise HTTPException(status_code=404, detail="No download found for this target_dir")
+
+    logger.info("SSE FOLLOW start target_dir=%s status=%s progress=%s", target_dir, job.status, job.progress)
+
+    async def event_generator():
+        # Emit initial state
+        if job.status != "downloading":
+            status_type = "complete" if job.status == "complete" else "error"
+            for log in job.logs:
+                yield f"data: {json.dumps({'type': 'log', 'line': log})}\n\n"
+            yield f"data: {
+                json.dumps({'type': status_type, 'message': job.error or 'Done', 'progress': job.progress})
+            }\n\n"
+            return
+
+        # Emit all existing logs
+        for log in job.logs:
+            yield f"data: {json.dumps({'type': 'log', 'line': log})}\n\n"
+
+        # Poll for updates
+        last_log_count = len(job.logs)
+        last_progress = job.progress
+        last_updated = job.updated_at
+        while True:
+            await asyncio.sleep(1)
+            current = get_job(target_dir)
+            if not current:
+                break
+            if current.updated_at > last_updated:
+                # Emit new log lines
+                new_logs = current.logs[last_log_count:]
+                for log in new_logs:
+                    yield f"data: {json.dumps({'type': 'log', 'line': log})}\n\n"
+                last_log_count = len(current.logs)
+
+                # Emit progress update
+                if current.progress != last_progress:
+                    yield f"data: {json.dumps({'type': 'heartbeat', 'progress': current.progress})}\n\n"
+                    last_progress = current.progress
+
+                last_updated = current.updated_at
+
+                # Check terminal state
+                if current.status != "downloading":
+                    status_type = "complete" if current.status == "complete" else "error"
+                    yield f"data: {
+                        json.dumps(
+                            {'type': status_type, 'message': current.error or 'Done', 'progress': current.progress}
+                        )
+                    }\n\n"
+                    break
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/download/stream")
+async def download_stream(request: Request, model_id: str, target_dir: str, expected_bytes: int = 0):
+    await require_admin(request)
+    from fastapi.responses import StreamingResponse
+
+    from .docker_manager import CONTAINER_MODELS_DIR_RW
+    from .download_tracker import complete_job, start_job, update_job
     from .hf_downloader import get_hf_token, run_download
+
+    logger.info(
+        "SSE DOWNLOAD request model_id=%s target_dir=%s expected_bytes=%d", model_id, target_dir, expected_bytes
+    )
 
     if not target_dir:
         raise HTTPException(status_code=400, detail="target_dir is required")
 
-    # Path traversal guard
-    real = os.path.realpath(CONTAINER_MODELS_DIR)
-    abs_target = os.path.realpath(os.path.join(CONTAINER_MODELS_DIR, target_dir))
+    # Path traversal guard (use RW mount for downloads)
+    real = os.path.realpath(CONTAINER_MODELS_DIR_RW)
+    abs_target = os.path.realpath(os.path.join(CONTAINER_MODELS_DIR_RW, target_dir))
     if not abs_target.startswith(real + os.sep) and abs_target != real:
         raise HTTPException(status_code=400, detail="target_dir must be under MODELS_DIR")
 
+    logger.info("SSE DOWNLOAD abs_target=%s", abs_target)
+
     token = await get_hf_token()
+    logger.info("SSE DOWNLOAD token available=%s", bool(token))
+
+    # Register in tracker
+    start_job(target_dir, model_id)
 
     async def event_generator():
+        from queue import Empty as QueueEmpty
+        from queue import Queue as ThreadQueue
+
         from .hf_downloader import ModelError as HFModelError
 
         progress_queue: asyncio.Queue[str] = asyncio.Queue()
+        thread_queue: ThreadQueue[str] = ThreadQueue()
+        _drainer_stopped = [False]
 
-        async def _progress(line: str):
-            await progress_queue.put(line)
+        async def _queue_drainer():
+            while not _drainer_stopped[0]:
+                try:
+                    line = await asyncio.to_thread(thread_queue.get, True, 0.5)
+                    progress_queue.put_nowait(line)
+                except QueueEmpty:
+                    pass
+                except Exception as e:
+                    logger.info("SSE DOWNLOAD drainer exited: %s", e)
+                    break
+            logger.info("SSE DOWNLOAD drainer stopped normally")
 
         try:
             yield f"data: {json.dumps({'type': 'start', 'model_id': model_id, 'target_dir': target_dir})}\n\n"
             yield f"data: {json.dumps({'type': 'log', 'line': 'Starting download...'})}\n\n"
-            download_task = asyncio.create_task(run_download(model_id, abs_target, token, progress_fn=_progress))
+            drainer_task = asyncio.create_task(_queue_drainer())
+            download_task = asyncio.create_task(
+                run_download(model_id, abs_target, token, progress_queue=thread_queue, expected_bytes=expected_bytes)
+            )
+            logger.info("SSE DOWNLOAD tasks created, download_task=%s drainer_task=%s", download_task, drainer_task)
             while True:
                 try:
                     line = await asyncio.wait_for(progress_queue.get(), timeout=5.0)
+                    logger.info("SSE DOWNLOAD progress line: %s", line)
+                    # Update tracker
+                    progress_match = __import__("re").search(r"(\d+)%", line)
+                    if progress_match:
+                        update_job(target_dir, progress=float(progress_match[1]))
+                    else:
+                        update_job(target_dir, log_line=line)
                     yield f"data: {json.dumps({'type': 'log', 'line': line})}\n\n"
                 except TimeoutError:
                     if download_task.done():
+                        logger.info("SSE DOWNLOAD timeout + download_task.done()=%s", download_task.done())
+                        # Stop drainer, then drain remaining
+                        _drainer_stopped[0] = True
+                        await asyncio.sleep(0.5)
                         while not progress_queue.empty():
                             line = progress_queue.get_nowait()
                             yield f"data: {json.dumps({'type': 'log', 'line': line})}\n\n"
                         break
-            await download_task
-            yield f"data: {json.dumps({'type': 'complete', 'model_id': model_id, 'target_dir': target_dir})}\n\n"
+            _drainer_stopped[0] = True
+            await asyncio.sleep(0.5)  # let drainer notice and exit
+            results = await asyncio.gather(download_task, drainer_task, return_exceptions=True)
+            logger.info("SSE DOWNLOAD gather results=%s", results)
+            # Check if download task raised an exception
+            download_exc = None
+            for r in results:
+                if isinstance(r, Exception):
+                    download_exc = r
+                    break
+            if download_exc:
+                err_msg = (
+                    str(download_exc) if isinstance(download_exc, HFModelError) else f"Download failed: {download_exc}"
+                )
+                logger.error("SSE DOWNLOAD exception from gather: %s (%s)", download_exc, type(download_exc).__name__)
+                complete_job(target_dir, error=err_msg)
+                yield f"data: {json.dumps({'type': 'error', 'message': err_msg})}\n\n"
+            else:
+                logger.info("SSE DOWNLOAD complete model_id=%s", model_id)
+                complete_job(target_dir)
+                yield f"data: {json.dumps({'type': 'complete', 'model_id': model_id, 'target_dir': target_dir})}\n\n"
         except HFModelError as e:
+            logger.exception("SSE DOWNLOAD HFModelError caught in generator")
+            complete_job(target_dir, error=str(e))
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
         except Exception as e:
+            logger.exception("SSE DOWNLOAD unhandled exception in generator")
+            complete_job(target_dir, error=str(e))
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
@@ -1350,7 +1592,7 @@ async def download_stream(request: Request, model_id: str, target_dir: str):
 async def create_model_from_download(request: Request):
     await require_admin(request)
     from . import db as db_module
-    from .docker_manager import CONTAINER_MODELS_DIR
+    from .docker_manager import CONTAINER_MODELS_DIR_RW
     from .hf_downloader import generate_model_config
 
     data = await request.json()
@@ -1358,9 +1600,9 @@ async def create_model_from_download(request: Request):
     target_dir = data.get("target_dir", "")
     gpu_indices = data.get("gpu_indices", [])
 
-    # Path traversal guard
-    real = os.path.realpath(CONTAINER_MODELS_DIR)
-    abs_target = os.path.realpath(os.path.join(CONTAINER_MODELS_DIR, target_dir))
+    # Path traversal guard (use RW mount - both /models and /downloads map to same host path)
+    real = os.path.realpath(CONTAINER_MODELS_DIR_RW)
+    abs_target = os.path.realpath(os.path.join(CONTAINER_MODELS_DIR_RW, target_dir))
     if not abs_target.startswith(real + os.sep) and abs_target != real:
         raise HTTPException(status_code=400, detail="target_dir must be under MODELS_DIR")
 

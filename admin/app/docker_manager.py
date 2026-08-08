@@ -7,11 +7,12 @@ from pathlib import Path
 
 import httpx
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("sgfleet-admin")
 
 SWITCH_DIR = os.environ.get("SWITCH_DIR", "/opt/switch")
 MODELS_DIR = os.environ.get("MODELS_DIR", "YOUR_MODELS_PATH/vllm_models")
 CONTAINER_MODELS_DIR = "/models"
+CONTAINER_MODELS_DIR_RW = "/downloads"
 
 ADMIN_SKIP = {"sgfleet-admin", "sgfleet-alloy", "sgfleet-nginx-exporter"}
 

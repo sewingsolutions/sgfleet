@@ -2,16 +2,16 @@ import asyncio
 import contextlib
 import logging
 import os
+import queue
 import shutil
 import time
 from urllib.parse import urlencode
 
 import httpx
-from huggingface_hub import snapshot_download
 
-from .docker_manager import CONTAINER_MODELS_DIR, ModelError, _run
+from .docker_manager import CONTAINER_MODELS_DIR, CONTAINER_MODELS_DIR_RW, ModelError, _run
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("sgfleet-admin")
 
 HF_API_BASE = "https://huggingface.co/api/models"
 
@@ -143,6 +143,19 @@ async def search_hf_models(
         return None
 
     st_cache: dict[str, dict] = {}
+    gated_cache: dict[str, bool] = {}
+
+    # Check if a gated model is actually accessible with current token
+    async def check_accessible(model_id: str) -> None:
+        if model_id in gated_cache:
+            return
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(f"{HF_API_BASE}/{model_id}", headers=headers)
+                gated_cache[model_id] = resp.status_code == 200
+        except Exception:
+            gated_cache[model_id] = False
+
     filtered = []
     for m in raw:
         if not has_token and m.get("gated") and m["gated"] != "auto":
@@ -151,6 +164,13 @@ async def search_hf_models(
         if "safetensors" not in tags:
             continue
         filtered.append(m)
+
+    # Check gated model accessibility in parallel
+    if filtered and has_token:
+        gated_ids = [m["id"] for m in filtered if m.get("gated")]
+        if gated_ids:
+            await asyncio.gather(*[check_accessible(mid) for mid in gated_ids], return_exceptions=True)
+            filtered = [m for m in filtered if not m.get("gated") or gated_cache.get(m["id"], True)]
 
     if filtered:
         tasks = [fetch_safetensors(m["id"]) for m in filtered]
@@ -194,7 +214,7 @@ async def search_hf_models(
 
 
 async def check_disk_space() -> dict:
-    stat = os.statvfs(CONTAINER_MODELS_DIR)
+    stat = os.statvfs(CONTAINER_MODELS_DIR_RW)
     free_bytes = stat.f_bavail * stat.f_frsize
     total_bytes = stat.f_blocks * stat.f_frsize
     return {
@@ -221,15 +241,43 @@ async def cleanup_model_path(target_dir: str) -> bool:
     return False
 
 
+def _dir_size(path: str) -> int:
+    total = 0
+    if not os.path.isdir(path):
+        return 0
+    try:
+        for dirpath, _, filenames in os.walk(path):
+            for f in filenames:
+                with contextlib.suppress(OSError):
+                    total += os.path.getsize(os.path.join(dirpath, f))
+    except OSError:
+        pass
+    return total
+
+
 async def run_download(
     model_id: str,
     target_dir: str,
     token: str,
-    progress_fn=None,
+    progress_queue: queue.Queue | None = None,
+    expected_bytes: int = 0,
 ) -> None:
-    # Resolve relative target_dir against container MODELS_DIR
+    from huggingface_hub import HfApi, hf_hub_download
+
+    logger.info(
+        "DOWNLOAD START model_id=%s target_dir=%s token=%s expected_bytes=%d",
+        model_id,
+        target_dir,
+        bool(token),
+        expected_bytes,
+    )
+
+    # Resolve relative target_dir against container MODELS_DIR (use RW mount for downloads)
     if not os.path.isabs(target_dir):
-        target_dir = os.path.join(CONTAINER_MODELS_DIR, target_dir)
+        target_dir = os.path.join(CONTAINER_MODELS_DIR_RW, target_dir)
+    logger.info("DOWNLOAD resolved target_dir=%s", target_dir)
+
+    os.makedirs(target_dir, exist_ok=True)
 
     include_patterns = {
         "*.safetensors",
@@ -244,20 +292,149 @@ async def run_download(
         "README.md",
     }
 
-    def _download_sync():
-        snapshot_download(
-            repo_id=model_id,
-            repo_type="model",
-            local_dir=target_dir,
-            allow_patterns=list(include_patterns),
-            token=token or None,
-            local_dir_use_symlinks=False,
-        )
+    def _matches(p: str) -> bool:
+        base = os.path.basename(p)
+        for pat in include_patterns:
+            if pat == base:
+                return True
+            if pat.startswith("*.") and base.endswith(pat[1:]):
+                return True
+        return False
+
+    api = HfApi()
+
+    def _list_and_download():
+        # 1) Get file list from HF
+        if progress_queue:
+            progress_queue.put("Listing files on HuggingFace...")
+        logger.info("DOWNLOAD listing files for %s", model_id)
+
+        all_files = list(api.list_repo_files(repo_id=model_id, repo_type="model", token=token or None))
+        logger.info("DOWNLOAD found %d total files in repo", len(all_files))
+        files_to_download = [f for f in all_files if _matches(f)]
+        logger.info("DOWNLOAD %d files match download patterns", len(files_to_download))
+
+        if not files_to_download:
+            msg = f"No matching files found in {model_id}"
+            logger.error("DOWNLOAD %s", msg)
+            raise ModelError(msg)
+
+        if progress_queue:
+            progress_queue.put(f"Found {len(files_to_download)} files to download")
+
+        # 2) Get sizes for each file
+        if progress_queue:
+            progress_queue.put("Getting file sizes...")
+        logger.info("DOWNLOAD getting file sizes for %d files", len(files_to_download))
+
+        file_sizes: list[tuple[str, int]] = []
+        total_size = 0
+        for fp in files_to_download:
+            try:
+                info = api.get_paths_info(repo_id=model_id, paths=[fp], repo_type="model", token=token or None)
+                size = info[0].size if info and info[0].size else 0
+            except Exception as e:
+                logger.warning("DOWNLOAD get_paths_info failed for %s: %s", fp, e)
+                size = 0
+            file_sizes.append((fp, size))
+            total_size += size
+
+        logger.info("DOWNLOAD total_size=%d (%.1fGB)", total_size, total_size / (1024**3))
+        if total_size > 0 and progress_queue:
+            gb = total_size / (1024**3)
+            progress_queue.put(f"Total size: {gb:.1f}GB ({len(file_sizes)} files)")
+
+        # 3) Download each file, track progress
+        on_disk = 0
+        for i, (fp, _size) in enumerate(file_sizes):
+            logger.info("DOWNLOAD [%d/%d] downloading %s", i + 1, len(file_sizes), fp)
+            if progress_queue:
+                progress_queue.put(f"Downloading {fp}...")
+            try:
+                start_t = time.time()
+                hf_hub_download(
+                    repo_id=model_id,
+                    filename=fp,
+                    repo_type="model",
+                    local_dir=target_dir,
+                    token=token or None,
+                )
+                elapsed = time.time() - start_t
+                # Verify file actually exists after download
+                # Handle subdirectories - hf_hub_download may create subdirs
+                local_fp = os.path.join(target_dir, fp)
+                if os.path.exists(local_fp):
+                    actual_size = os.path.getsize(local_fp)
+                    logger.info(
+                        "DOWNLOAD [%d/%d] %s done in %.1fs (%.1fMB)",
+                        i + 1,
+                        len(file_sizes),
+                        fp,
+                        elapsed,
+                        actual_size / (1024**2),
+                    )
+                else:
+                    logger.warning(
+                        "DOWNLOAD [%d/%d] %s: file not found at %s after download", i + 1, len(file_sizes), fp, local_fp
+                    )
+
+            except Exception as e:
+                logger.error("DOWNLOAD [%d/%d] failed for %s: %s", i + 1, len(file_sizes), fp, e)
+                raise ModelError(f"Failed to download {fp}: {e}") from e
+
+            # Recalculate on-disk size after each file
+            on_disk = _dir_size(target_dir)
+            logger.info("DOWNLOAD [%d/%d] on_disk=%d (%.1fGB)", i + 1, len(file_sizes), on_disk, on_disk / (1024**3))
+            if progress_queue:
+                if total_size > 0:
+                    pct = min(99, int(on_disk / total_size * 100))
+                else:
+                    pct = int((i + 1) / len(file_sizes) * 100)
+                mb = on_disk / (1024 * 1024)
+                gb = on_disk / (1024**3)
+                if on_disk < 1024**3:
+                    progress_queue.put(f"[{i + 1}/{len(file_sizes)}] {pct}% {mb:.1f}MB")
+                else:
+                    progress_queue.put(f"[{i + 1}/{len(file_sizes)}] {pct}% {gb:.1f}GB")
+
+        return on_disk
 
     try:
-        await asyncio.to_thread(_download_sync)
+        final_size = await asyncio.to_thread(_list_and_download)
+        logger.info("DOWNLOAD asyncio.to_thread completed final_size=%d", final_size)
+    except ModelError:
+        logger.exception("DOWNLOAD ModelError during download")
+        raise
     except Exception as exc:
+        logger.exception("DOWNLOAD unhandled exception during download: %s", exc)
         raise ModelError(f"Download failed: {exc}") from exc
+
+    # Final validation
+    logger.info("DOWNLOAD final validation for %s", target_dir)
+    if not os.path.isdir(target_dir):
+        msg = f"Download completed but target directory not found: {target_dir}"
+        logger.error("DOWNLOAD %s", msg)
+        raise ModelError(msg)
+    entries = os.listdir(target_dir)
+    logger.info("DOWNLOAD target_dir entries: %s", entries[:20])
+    has_weights = any(f.endswith(".safetensors") or f.endswith(".bin") for f in entries)
+    if not has_weights:
+        msg = (
+            f"Download completed but no weight files (.safetensors/.bin) found in {target_dir}. "
+            f"Files found: {entries[:10]}"
+        )
+        logger.error("DOWNLOAD %s", msg)
+        raise ModelError(msg)
+
+    if progress_queue:
+        gb = final_size / (1024**3)
+        mb = final_size / (1024 * 1024)
+        if final_size < 1024**3:
+            progress_queue.put(f"Done! Downloaded {mb:.1f}MB ({len(entries)} files)")
+        else:
+            progress_queue.put(f"Done! Downloaded {gb:.1f}GB ({len(entries)} files)")
+
+    logger.info("DOWNLOAD SUCCESS model_id=%s final_size=%d entries=%d", model_id, final_size, len(entries))
 
 
 def generate_model_config(hf_model: dict, target_dir: str, gpu_indices: list[int]) -> dict:
@@ -285,8 +462,10 @@ def generate_model_config(hf_model: dict, target_dir: str, gpu_indices: list[int
         except (TypeError, ValueError):
             pass
 
-    # Preserve full relative path under CONTAINER_MODELS_DIR for model_path
-    rel_path = os.path.relpath(target_dir, CONTAINER_MODELS_DIR)
+    # Extract relative model path from target_dir (works with both /models and /downloads mount)
+    rel_path = os.path.relpath(target_dir, CONTAINER_MODELS_DIR_RW)
+    if rel_path.startswith(".."):
+        rel_path = os.path.relpath(target_dir, CONTAINER_MODELS_DIR)
     return {
         "model_id": short_id,
         "name": name,

@@ -132,6 +132,7 @@ export interface Model {
   created_at: string
   status?: 'running' | 'stopped' | 'starting' | 'stopping' | 'error'
   health?: ModelHealth | null
+  disk_bytes?: number | null
 }
 
 export interface LogEntry {
@@ -219,11 +220,40 @@ export interface DiskUsage {
   total_gb: number
 }
 
-export type SSEEventType = 'start' | 'log' | 'complete' | 'error' | 'model_created'
+export interface LocalModel {
+  name: string
+  path: string
+  container_path: string
+  size_bytes: number
+  size_gb: number
+  file_count: number
+}
+
+export type SSEEventType = 'start' | 'log' | 'complete' | 'error' | 'model_created' | 'heartbeat'
 export interface SSEEvent {
   type: SSEEventType
   line?: string
   message?: string
   model_id?: string
   target_dir?: string
+}
+
+export interface DownloadJob {
+  model_id: string
+  target_dir: string
+  status: 'downloading' | 'complete' | 'error'
+  progress: number
+  logs: string[]
+  error: string | null
+  started_at: number
+  updated_at: number
+}
+
+export interface DownloadStatusResponse {
+  downloads: DownloadJob[]
+}
+
+export interface DockerImagesResponse {
+  images: string[]
+  error?: string
 }

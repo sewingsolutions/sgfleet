@@ -134,6 +134,7 @@ async def admin_home(request: Request):
 @router.get("/admin/settings")
 @router.get("/admin/system")
 @router.get("/admin/models")
+@router.get("/admin/models/new")
 @router.get("/admin/models/download")
 @router.get("/admin/audit")
 @router.get("/admin/version")

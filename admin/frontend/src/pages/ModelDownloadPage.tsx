@@ -61,6 +61,118 @@ export default function ModelDownloadPage() {
   const hasToken = tokenData?.has_token ?? false
   const totalVram = gpuData?.total_vram_gb ?? 0
 
+  // Check for active downloads on mount and resume
+  useEffect(() => {
+    let cancelled = false
+    api.getDownloadStatus().then(async (res) => {
+      if (cancelled) return
+      // Find most recent download (active first, then completed/errored)
+      const active = res.downloads.find((d) => d.status === 'downloading')
+      const done = res.downloads.find((d) => d.status !== 'downloading')
+      const job = active || done
+      if (!job) return
+
+      console.log('[ModelDownloadPage] Resuming download:', job)
+
+      // Search for the model info by ID
+      const models = await api.searchHFModels(job.model_id, undefined, 10).catch(() => ({ models: [], hidden_by_vram: 0 }))
+      const modelMatch = models.models.find((m) => m.id === job.model_id)
+
+      if (modelMatch) {
+        setSelectedModel(modelMatch)
+      } else {
+        console.warn('[ModelDownloadPage] Model not found in search for', job.model_id)
+        // Create a minimal model stub so the download UI renders
+        setSelectedModel({
+          id: job.model_id,
+          author: '',
+          likes: 0,
+          downloads: 0,
+          vram_gb: 0,
+          parameters: {},
+          total_params: 0,
+          storage_bytes: 0,
+          library: '',
+          tags: [],
+          gated: false,
+          last_modified: '',
+          config: {},
+          architectures: [],
+        })
+      }
+
+      setTargetDir(job.target_dir)
+      setDownloadLogs(job.logs)
+      setDownloadProgress(job.progress)
+
+      if (job.status === 'downloading') {
+        setDownloadState('downloading')
+        setDownloadLogs((prev) => [...prev, 'Resuming download session...'])
+
+        // Start SSE to follow progress (uses /follow, not /stream)
+        const abort = new AbortController()
+        abortRef.current = abort
+        const url = `/admin/api/download/follow?target_dir=${encodeURIComponent(job.target_dir)}`
+
+        fetch(url, { signal: abort.signal }).then(async (response) => {
+          const reader = response.body?.getReader()
+          if (!reader) return
+          const decoder = new TextDecoder()
+          let buffer = ''
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done || cancelled) break
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const event: SSEEvent & { progress?: number } = JSON.parse(line.slice(6))
+                  if (event.type === 'log') {
+                    setDownloadLogs((prev) => [...prev.slice(-50), event.line || ''])
+                    const pm = event.line?.match(/(\d+)%/)
+                    if (pm) setDownloadProgress(parseFloat(pm[1]))
+                  } else if (event.type === 'heartbeat') {
+                    if (event.progress !== undefined) setDownloadProgress(event.progress)
+                  } else if (event.type === 'complete') {
+                  setDownloadState('complete')
+                  setDownloadProgress(100)
+                  if (modelMatch && !cancelled) {
+                    await fetch('/admin/api/download/model-config', {
+                      method: 'POST',
+                      credentials: 'same-origin',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        hf_model: modelMatch,
+                        target_dir: job.target_dir,
+                        gpu_indices: selectedGpus,
+                      }),
+                    })
+                    queryClient.invalidateQueries({ queryKey: ['models'] })
+                  }
+                  showToast('Download complete!')
+                } else if (event.type === 'error') {
+                  setDownloadState('error')
+                  showToast(`Download failed: ${event.message}`)
+                  }
+                } catch { /* skip */ }
+              }
+            }
+          }
+        }).catch((e) => console.error('[ModelDownloadPage] SSE follow error:', e))
+      } else if (job.status === 'complete') {
+        setDownloadState('complete')
+        setDownloadProgress(100)
+        showToast('Download was completed')
+      } else {
+        setDownloadState('error')
+        showToast(`Download failed: ${job.error || 'unknown error'}`)
+      }
+    }).catch((e) => console.error('[ModelDownloadPage] resume error:', e))
+    return () => { cancelled = true }
+  }, [])
+
   // Search models
   useEffect(() => {
     const t = setTimeout(() => setSearchDebounce(searchQuery), 400)
@@ -126,7 +238,8 @@ export default function ModelDownloadPage() {
     abortRef.current = abort
 
     const gpuParam = selectedGpus.length ? `&gpus=${selectedGpus.join(',')}` : ''
-    const url = `/admin/api/download/stream?model_id=${encodeURIComponent(selectedModel.id)}&target_dir=${encodeURIComponent(targetDir)}${gpuParam}`
+    const expectedBytes = selectedModel.storage_bytes || 0
+    const url = `/admin/api/download/stream?model_id=${encodeURIComponent(selectedModel.id)}&target_dir=${encodeURIComponent(targetDir)}&expected_bytes=${expectedBytes}${gpuParam}`
 
     try {
       const response = await fetch(url, { signal: abort.signal })
@@ -151,9 +264,16 @@ export default function ModelDownloadPage() {
               if (event.type === 'log') {
                 setDownloadLogs(prev => [...prev.slice(-50), event.line || ''])
                 if (event.line) {
-                  const progressMatch = event.line.match(/(\d+\.?\d*)%/)
+                  const progressMatch = event.line.match(/(\d+)%/)
                   if (progressMatch) {
                     setDownloadProgress(parseFloat(progressMatch[1]))
+                  }
+                  const downloadedMatch = event.line.match(/Downloaded\s+([\d.]+)(MB|GB)/)
+                  if (downloadedMatch) {
+                    const val = parseFloat(downloadedMatch[1])
+                    const unit = downloadedMatch[2]
+                    const mb = unit === 'GB' ? val * 1024 : val
+                    setDownloadLogs(prev => [...prev, `  → ${mb.toFixed(1)} MB downloaded`])
                   }
                 }
               } else if (event.type === 'complete') {

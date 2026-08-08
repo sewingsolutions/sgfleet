@@ -11,6 +11,12 @@ const statusColor = (s?: string) => {
   return 'bg-red-500'
 }
 
+const formatDiskSize = (bytes?: number | null) => {
+  if (bytes == null) return 'N/A'
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
+  return `${(bytes / 1024 ** 3).toFixed(1)} GB`
+}
+
 const statusLabel = (s?: string) => {
   if (s === 'running') return 'Running'
   if (s === 'starting') return 'Starting'
@@ -507,6 +513,10 @@ export default function ModelsPage() {
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                    <span>Size: {formatDiskSize(m.disk_bytes)}</span>
+                    <span>Path: <code className="font-mono">{m.model_path}</code></span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
                     <span>
                       Image: <code className="font-mono">{m.image}</code>
                     </span>
