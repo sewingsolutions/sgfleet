@@ -180,6 +180,109 @@ esc_prom="$(env_escape "${result[PROMETHEUS_HOST]:-}")"
   fi
 } > .env
 
+# ── Generate models.json ──────────────────────────────────────────────
+models_dir="${result[MODELS_DIR]:-/models}"
+
+if [[ ! -f models.json && -d "$models_dir" ]]; then
+  echo -e "\n${BOLD}${BLUE}Scanning for models in ${models_dir} ...${NC}"
+
+  dirs=()
+  while IFS= read -r -d '' entry; do
+    dirs+=("$(basename "$entry")")
+  done < <(find "$models_dir" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
+
+  if [[ ${#dirs[@]} -eq 0 ]]; then
+    echo -e "${YELLOW}  No model directories found. Run init.sh again after placing models.${NC}"
+  else
+    plural="y"
+    [[ ${#dirs[@]} -ne 1 ]] && plural="ies"
+    echo "  Found ${#dirs[@]} director${plural}: $(IFS=', '; echo "${dirs[*]}")"
+
+    model_entries=""
+    first=true
+    active_first=true
+    added_count=0
+
+    for d in "${dirs[@]}"; do
+      read -rp "  Add ${BOLD}${d}${NC} as a model? [Y/n/a] " c
+      c="${c,,}"
+      if [[ "$c" == "a" ]]; then
+        echo "  Skipping remaining directories."
+        break
+      fi
+      if [[ "$c" == "n" ]]; then
+        continue
+      fi
+
+      slug="$(echo "$d" | tr -cs '[:alnum:]-' '-' | tr '[:upper:]' '[:lower:]' | sed 's/^-//;s/-$//')"
+      container_id="sgfleet-${slug}"
+      active_val="false"
+      if $active_first; then
+        active_val="true"
+        active_first=false
+      fi
+
+      echo "  ${GREEN}+ ${d} (id: ${slug}, active: ${active_val})${NC}"
+      added_count=$((added_count + 1))
+
+      entry_json=$(cat <<MODELEOF
+    {
+      "id": "${slug}",
+      "name": "${d}",
+      "image": "lmsysorg/sglang:v0.5.16",
+      "model_path": "/models/${d}",
+      "context_length": 131072,
+      "max_output_length": 8192,
+      "port": 30000,
+      "container_name": "${container_id}",
+      "container_alias": "${container_id}",
+      "model_alias": "sgfleet-api-model",
+      "active": ${active_val},
+      "grace_period": 10,
+      "environment": {
+        "PYTORCH_CUDA_ALLOC_CONF": "expandable_segments:True",
+        "SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN": "1",
+        "SGLANG_USE_BREAKABLE_CUDA_GRAPH": "true"
+      },
+      "gpu": "auto",
+      "command_flags": [
+        "--context-length", "131072",
+        "--kv-cache-dtype", "fp8_e4m3",
+        "--mem-fraction-static", "0.90",
+        "--chunked-prefill-size", "8192",
+        "--enable-metrics",
+        "--enable-flashinfer"
+      ]
+    }
+MODELEOF
+)
+
+      if $first; then
+        model_entries="  ${entry_json}"
+        first=false
+      else
+        model_entries="${model_entries},
+  ${entry_json}"
+      fi
+    done
+
+    if [[ -n "$model_entries" ]]; then
+      cat > models.json <<EOF
+{
+  "models": [
+  ${model_entries}
+  ]
+}
+EOF
+      ap="y"; [[ added_count -ne 1 ]] && ap="ies"
+      echo -e "\n${GREEN}Wrote models.json with ${added_count} model entrie${ap}.${NC}"
+    fi
+  fi
+elif [[ -f models.json ]]; then
+  echo -e "\n${YELLOW}models.json already exists — skipping.${NC}"
+  echo "  To regenerate, remove models.json and run init.sh again.${NC}"
+fi
+
 # ── Summary ─────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}Setup complete.${NC}"
