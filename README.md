@@ -76,6 +76,8 @@ npx vitest run           # unit tests
 
 Changes to the admin service are deployed with `cd admin && ./deploy.sh` (rebuilds image + restarts container).
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for more.
+
 ## Access
 
 - **Admin login:** `ADMIN_API_KEY` from `.env`
