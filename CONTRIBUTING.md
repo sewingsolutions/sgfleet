@@ -3,7 +3,7 @@
 ## Setup
 
 ```bash
-git clone https://github.com/sgfleet/sgfleet.git
+git clone https://github.com/joesew/sgfleet.git
 cd sgfleet
 
 # Backend
