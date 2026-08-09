@@ -153,8 +153,13 @@ class TestLogDBHandler:
         handler = LogDBHandler()
         for i in range(1010):
             record = logging.LogRecord(
-                name="test", level=logging.INFO, pathname="", lineno=0,
-                msg="", args=(), exc_info=None,
+                name="test",
+                level=logging.INFO,
+                pathname="",
+                lineno=0,
+                msg="",
+                args=(),
+                exc_info=None,
             )
             record.request = {
                 "event": "request",
@@ -178,6 +183,7 @@ class TestLogDBHandler:
 class TestSetupLogging:
     def test_returns_logger(self):
         from app.logging import setup_logging
+
         logger = setup_logging()
         assert logger.name == "sgfleet-admin"
 

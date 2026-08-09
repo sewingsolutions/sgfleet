@@ -26,6 +26,7 @@ services:
       - ${MODELS_DIR:-/models}:/downloads
     environment:
       - ADMIN_API_KEY=${ADMIN_API_KEY}
+      - SGFLEET_BASE_URL=${SGFLEET_BASE_URL:-}
       - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN:-}
   alloy:
     image: grafana/alloy:latest

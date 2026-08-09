@@ -866,10 +866,10 @@ def build_opencode_config(
     model_name: str,
     context: int,
     output: int,
-    base_url: str | None = None,
+    base_url: str,
 ) -> dict:
     """Build an opencode.json config snippet for the given user and model."""
-    url = base_url or settings.sgfleet_base_url
+    url = base_url
     return {
         "$schema": "https://opencode.ai/config.json",
         "provider": {
@@ -923,9 +923,10 @@ async def generate_user_config(request: Request, user_id: int, body: GenerateCon
     model_name = default_model.get("name", default_model["model_id"])
     context_length = default_model.get("context_length", 32768)
     max_output_length = default_model.get("max_output_length", 4096)
-    config = build_opencode_config(
-        raw_key, model_alias, model_name, context_length, max_output_length, settings.sgfleet_base_url
-    )
+    from .hf_downloader import get_sgfleet_base_url
+
+    base = await get_sgfleet_base_url()
+    config = build_opencode_config(raw_key, model_alias, model_name, context_length, max_output_length, base)
     return {
         "api_key": raw_key,
         "rotated": body.rotate,
@@ -1435,6 +1436,26 @@ async def set_hf_token_endpoint(request: Request):
     data = await request.json()
     token = data.get("token", "")
     await set_hf_token(token)
+    return {"saved": True}
+
+
+@router.get("/settings/base-url")
+async def get_base_url_endpoint(request: Request):
+    await require_admin(request)
+    from .hf_downloader import get_sgfleet_base_url
+
+    url = await get_sgfleet_base_url()
+    return {"base_url": url}
+
+
+@router.post("/settings/base-url")
+async def set_base_url_endpoint(request: Request):
+    await require_admin(request)
+    from .hf_downloader import set_sgfleet_base_url
+
+    data = await request.json()
+    url = data.get("url", "")
+    await set_sgfleet_base_url(url)
     return {"saved": True}
 
 

@@ -16,7 +16,7 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # ── Key order ────────────────────────────────────────────────────────
-KEY_NAMES=(ADMIN_API_KEY MODELS_DIR HUGGINGFACE_TOKEN PROMETHEUS_HOST)
+KEY_NAMES=(ADMIN_API_KEY SGFLEET_BASE_URL MODELS_DIR HUGGINGFACE_TOKEN PROMETHEUS_HOST)
 
 # ── Load existing .env into associative array ────────────────────────
 declare -A existing_values
@@ -71,14 +71,16 @@ prompt_key() {
 
   case "$name" in
     ADMIN_API_KEY)     desc="Admin API key (dashboard login)";;
+    SGFLEET_BASE_URL)  desc="External gateway URL (used in generated configs)";;
     MODELS_DIR)        desc="Host directory for model files";;
     HUGGINGFACE_TOKEN) desc="HuggingFace API token (gated models)";;
     PROMETHEUS_HOST)   desc="Prometheus host (leave empty to disable metrics)";;
   esac
 
   case "$name" in
-    MODELS_DIR) default="/models";;
-    *)          default="";;
+    MODELS_DIR)        default="/models";;
+    SGFLEET_BASE_URL)  default="https://your-gateway-domain.example.com/v1";;
+    *)                 default="";;
   esac
 
   if [[ "${has_key[$name]:-}" == "1" ]]; then
@@ -95,6 +97,8 @@ prompt_key() {
       esac
     done
   fi
+
+  echo ""
 
   if [[ "$name" == "ADMIN_API_KEY" ]]; then
     read -rp "  Auto-generate? [Y/n] " c
@@ -150,6 +154,7 @@ done
 echo -e "\n${BOLD}Writing .env ...${NC}"
 
 esc_admin="$(env_escape "${result[ADMIN_API_KEY]:-}")"
+esc_base="$(env_escape "${result[SGFLEET_BASE_URL]:-}")"
 esc_models="$(env_escape "${result[MODELS_DIR]:-}")"
 esc_hf="$(env_escape "${result[HUGGINGFACE_TOKEN]:-}")"
 esc_prom="$(env_escape "${result[PROMETHEUS_HOST]:-}")"
@@ -159,6 +164,9 @@ esc_prom="$(env_escape "${result[PROMETHEUS_HOST]:-}")"
   echo ""
   echo "# Admin"
   echo "ADMIN_API_KEY=\"${esc_admin}\""
+  echo ""
+  echo "# Gateway"
+  echo "SGFLEET_BASE_URL=\"${esc_base}\""
   echo ""
   echo "# Models"
   echo "MODELS_DIR=\"${esc_models}\""
@@ -177,6 +185,7 @@ echo ""
 echo -e "${GREEN}${BOLD}Setup complete.${NC}"
 echo ""
 echo -e "${BOLD}Configuration:${NC}"
+echo -e "  SGFLEET_BASE_URL  ${BOLD}${result[SGFLEET_BASE_URL]:-<empty>}${NC}"
 echo -e "  MODELS_DIR        ${BOLD}${result[MODELS_DIR]:-<empty>}${NC}"
 
 if [[ -n "${result[HUGGINGFACE_TOKEN]:-}" ]]; then

@@ -507,3 +507,21 @@ async def set_hf_token(token: str) -> None:
     async with get_db() as db:
         await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("hf_api_token", token))
         await db.commit()
+
+
+async def get_sgfleet_base_url() -> str:
+    from .db import get_db
+
+    async with get_db() as db, db.execute("SELECT value FROM config WHERE key = 'sgfleet_base_url'") as cursor:
+        row = await cursor.fetchone()
+        if row:
+            return row[0]
+    return "http://localhost:8000/v1"
+
+
+async def set_sgfleet_base_url(url: str) -> None:
+    from .db import get_db
+
+    async with get_db() as db:
+        await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("sgfleet_base_url", url))
+        await db.commit()

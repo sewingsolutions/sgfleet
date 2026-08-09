@@ -10,8 +10,6 @@ class Settings(BaseSettings):
     default_rate_limit: float = 2.0
     default_max_concurrent: int = 2
     default_request_cost: float = 0.001
-    sgfleet_base_url: str = "http://localhost:8000/v1"
-
     model_config = {"env_prefix": "", "env_parse_none_str": "None", "protected_namespaces": ()}
 
     def mask_key(self, key: str) -> str:

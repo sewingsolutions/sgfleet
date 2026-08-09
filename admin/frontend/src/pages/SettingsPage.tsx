@@ -162,6 +162,8 @@ export default function SettingsPage() {
         </button>
       </div>
 
+      <BaseUrlSection />
+
       <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-3 sm:p-6 border border-gray-200 dark:border-slate-700 mb-3 sm:mb-6">
         <h2 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white mb-2">HuggingFace</h2>
         <p className="text-gray-500 dark:text-gray-400 mb-3 sm:mb-4 text-xs sm:text-sm">API token for downloading gated models. Get one at <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 underline">huggingface.co/settings/tokens</a></p>
@@ -423,6 +425,55 @@ function HFTokenSection() {
           {saveMutation.isPending ? 'Saving...' : 'Save'}
         </button>
       </div>
+    </div>
+  )
+}
+
+function BaseUrlSection() {
+  const queryClient = useQueryClient()
+  const showToast = useToast()
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['settings-base-url'],
+    queryFn: api.getBaseUrl,
+  })
+
+  const saveMutation = useMutation({
+    mutationFn: api.setBaseUrl,
+    onSuccess: () => {
+      showToast('Base URL saved')
+      queryClient.invalidateQueries({ queryKey: ['settings-base-url'] })
+    },
+  })
+
+  return (
+    <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-3 sm:p-6 border border-gray-200 dark:border-slate-700 mb-3 sm:mb-6">
+      <h2 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white mb-2">Gateway Base URL</h2>
+      <p className="text-gray-500 dark:text-gray-400 mb-3 sm:mb-4 text-xs sm:text-sm">External URL used in generated API configs (e.g. opencode.json). Clients will be configured to point to this address.</p>
+      {isLoading ? (
+        <p className="text-gray-500 dark:text-gray-400 text-sm">Loading...</p>
+      ) : (
+        <form onSubmit={async (e) => {
+          e.preventDefault()
+          const input = e.currentTarget.elements.namedItem('base-url') as HTMLInputElement
+          if (input.value) saveMutation.mutate(input.value)
+        }} className="flex gap-2">
+          <input
+            name="base-url"
+            type="url"
+            defaultValue={data?.base_url || ''}
+            placeholder="https://api.example.com/v1"
+            className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-sm focus:border-indigo-500 focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={saveMutation.isPending}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white text-sm disabled:opacity-50"
+          >
+            {saveMutation.isPending ? 'Saving...' : 'Save'}
+          </button>
+        </form>
+      )}
     </div>
   )
 }

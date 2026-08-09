@@ -51,6 +51,9 @@ export const api = {
   getSettingsDefaults: () => apiFetch<SettingsDefaults>('/api/settings/defaults'),
   updateSettingsDefaults: (data: Partial<SettingsDefaults>) =>
     apiFetch<SettingsDefaults>('/api/settings/defaults', { method: 'PATCH', body: JSON.stringify(data) }),
+  getBaseUrl: () => apiFetch<{ base_url: string }>('/api/settings/base-url'),
+  setBaseUrl: (url: string) =>
+    apiFetch<{ saved: boolean }>('/api/settings/base-url', { method: 'POST', body: JSON.stringify({ url }) }),
 
   // Auth
   login: (key: string) =>

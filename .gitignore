@@ -7,3 +7,4 @@ sglang-admin/app/GIT_LOG.txt
 __pycache__/
 .env
 users.json
+.env.backup*

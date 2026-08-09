@@ -42,7 +42,20 @@ async def test_get_logs_returns_entries():
     async with get_db() as db:
         await db.execute(
             "INSERT INTO admin_log (timestamp, level, event, method, path, status, latency_ms, user, request_id, ip, error, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("2025-01-01T00:00:00", "INFO", "request", "GET", "/v1/chat", 200, 50.0, "alice", "req-1", "10.0.0.1", None, None),
+            (
+                "2025-01-01T00:00:00",
+                "INFO",
+                "request",
+                "GET",
+                "/v1/chat",
+                200,
+                50.0,
+                "alice",
+                "req-1",
+                "10.0.0.1",
+                None,
+                None,
+            ),
         )
         await db.commit()
 
@@ -60,11 +73,37 @@ async def test_get_logs_filter_by_level():
     async with get_db() as db:
         await db.execute(
             "INSERT INTO admin_log (timestamp, level, event, method, path, status, latency_ms, user, request_id, ip, error, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("2025-01-01T00:00:00", "INFO", "request", "GET", "/v1/chat", 200, 50.0, "alice", "req-1", "10.0.0.1", None, None),
+            (
+                "2025-01-01T00:00:00",
+                "INFO",
+                "request",
+                "GET",
+                "/v1/chat",
+                200,
+                50.0,
+                "alice",
+                "req-1",
+                "10.0.0.1",
+                None,
+                None,
+            ),
         )
         await db.execute(
             "INSERT INTO admin_log (timestamp, level, event, method, path, status, latency_ms, user, request_id, ip, error, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("2025-01-01T00:00:01", "ERROR", "request", "POST", "/v1/chat", 500, 10.0, "bob", "req-2", "10.0.0.2", "error", None),
+            (
+                "2025-01-01T00:00:01",
+                "ERROR",
+                "request",
+                "POST",
+                "/v1/chat",
+                500,
+                10.0,
+                "bob",
+                "req-2",
+                "10.0.0.2",
+                "error",
+                None,
+            ),
         )
         await db.commit()
 
@@ -80,11 +119,37 @@ async def test_get_logs_filter_by_user():
     async with get_db() as db:
         await db.execute(
             "INSERT INTO admin_log (timestamp, level, event, method, path, status, latency_ms, user, request_id, ip, error, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("2025-01-01T00:00:00", "INFO", "request", "GET", "/v1/chat", 200, 50.0, "alice", "req-1", "10.0.0.1", None, None),
+            (
+                "2025-01-01T00:00:00",
+                "INFO",
+                "request",
+                "GET",
+                "/v1/chat",
+                200,
+                50.0,
+                "alice",
+                "req-1",
+                "10.0.0.1",
+                None,
+                None,
+            ),
         )
         await db.execute(
             "INSERT INTO admin_log (timestamp, level, event, method, path, status, latency_ms, user, request_id, ip, error, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("2025-01-01T00:00:01", "INFO", "request", "GET", "/v1/chat", 200, 50.0, "bob", "req-2", "10.0.0.2", None, None),
+            (
+                "2025-01-01T00:00:01",
+                "INFO",
+                "request",
+                "GET",
+                "/v1/chat",
+                200,
+                50.0,
+                "bob",
+                "req-2",
+                "10.0.0.2",
+                None,
+                None,
+            ),
         )
         await db.commit()
 
@@ -100,11 +165,37 @@ async def test_get_logs_filter_by_path():
     async with get_db() as db:
         await db.execute(
             "INSERT INTO admin_log (timestamp, level, event, method, path, status, latency_ms, user, request_id, ip, error, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("2025-01-01T00:00:00", "INFO", "request", "GET", "/v1/chat", 200, 50.0, "alice", "req-1", "10.0.0.1", None, None),
+            (
+                "2025-01-01T00:00:00",
+                "INFO",
+                "request",
+                "GET",
+                "/v1/chat",
+                200,
+                50.0,
+                "alice",
+                "req-1",
+                "10.0.0.1",
+                None,
+                None,
+            ),
         )
         await db.execute(
             "INSERT INTO admin_log (timestamp, level, event, method, path, status, latency_ms, user, request_id, ip, error, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("2025-01-01T00:00:01", "INFO", "request", "GET", "/health", 200, 5.0, "alice", "req-2", "10.0.0.1", None, None),
+            (
+                "2025-01-01T00:00:01",
+                "INFO",
+                "request",
+                "GET",
+                "/health",
+                200,
+                5.0,
+                "alice",
+                "req-2",
+                "10.0.0.1",
+                None,
+                None,
+            ),
         )
         await db.commit()
 
@@ -120,11 +211,37 @@ async def test_get_logs_filter_by_keyword():
     async with get_db() as db:
         await db.execute(
             "INSERT INTO admin_log (timestamp, level, event, method, path, status, latency_ms, user, request_id, ip, error, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("2025-01-01T00:00:00", "INFO", "request", "GET", "/v1/chat", 200, 50.0, "alice", "req-1", "10.0.0.1", "timeout", None),
+            (
+                "2025-01-01T00:00:00",
+                "INFO",
+                "request",
+                "GET",
+                "/v1/chat",
+                200,
+                50.0,
+                "alice",
+                "req-1",
+                "10.0.0.1",
+                "timeout",
+                None,
+            ),
         )
         await db.execute(
             "INSERT INTO admin_log (timestamp, level, event, method, path, status, latency_ms, user, request_id, ip, error, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            ("2025-01-01T00:00:01", "INFO", "request", "GET", "/health", 200, 5.0, "alice", "req-2", "10.0.0.1", None, "all good"),
+            (
+                "2025-01-01T00:00:01",
+                "INFO",
+                "request",
+                "GET",
+                "/health",
+                200,
+                5.0,
+                "alice",
+                "req-2",
+                "10.0.0.1",
+                None,
+                "all good",
+            ),
         )
         await db.commit()
 
@@ -141,7 +258,20 @@ async def test_get_logs_limit():
         for i in range(5):
             await db.execute(
                 "INSERT INTO admin_log (timestamp, level, event, method, path, status, latency_ms, user, request_id, ip, error, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (f"2025-01-01T00:00:{i:02d}", "INFO", "request", "GET", f"/path-{i}", 200, 10.0, "user", f"req-{i}", "10.0.0.1", None, None),
+                (
+                    f"2025-01-01T00:00:{i:02d}",
+                    "INFO",
+                    "request",
+                    "GET",
+                    f"/path-{i}",
+                    200,
+                    10.0,
+                    "user",
+                    f"req-{i}",
+                    "10.0.0.1",
+                    None,
+                    None,
+                ),
             )
         await db.commit()
 

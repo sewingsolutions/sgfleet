@@ -132,6 +132,17 @@ async def init_db():
         )""")
         await db.commit()
 
+        # Seed sgfleet_base_url from env if not yet in DB
+        env_base_url = os.environ.get("SGFLEET_BASE_URL", "")
+        if env_base_url:
+            async with db.execute("SELECT value FROM config WHERE key = ?", ("sgfleet_base_url",)) as cursor:
+                row = await cursor.fetchone()
+            if row is None:
+                await db.execute(
+                    "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("sgfleet_base_url", env_base_url)
+                )
+                await db.commit()
+
         async with db.execute("SELECT value FROM config WHERE key = ?", ("migration_version",)) as cursor:
             row = await cursor.fetchone()
         if row is None:
