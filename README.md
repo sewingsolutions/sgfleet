@@ -57,6 +57,25 @@ On startup, admin:
 cd admin && ./deploy.sh
 ```
 
+## Developing
+
+```bash
+# Backend
+cd admin
+ruff check app/          # lint
+python3 -m pytest tests/  # unit tests
+
+# Frontend
+cd admin/frontend
+npm install              # install dependencies
+npm run dev              # dev server
+npm run build            # production build
+npm run lint             # eslint
+npx vitest run           # unit tests
+```
+
+Changes to the admin service are deployed with `cd admin && ./deploy.sh` (rebuilds image + restarts container).
+
 ## Access
 
 - **Admin login:** `ADMIN_API_KEY` from `.env`
