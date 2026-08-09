@@ -26,12 +26,15 @@ from .db import (
     get_all_users,
     get_db,
     get_model_by_id,
+    get_model_versions,
+    get_model_versions_for_field,
     get_user_by_id,
     get_user_by_name,
     get_user_default_model,
     get_user_model_access,
     get_user_summary,
     rotate_key,
+    set_pending_restart,
     set_user_default_model,
     soft_delete,
     update_user,
@@ -571,14 +574,14 @@ async def create_new_model(request: Request):
     existing = await get_model_by_id(data["model_id"])
     if existing:
         raise HTTPException(status_code=409, detail="Model ID already exists")
-    await db_create_model(data)
+    model = await db_create_model(data)
     await reload_cache()
     asyncio.create_task(
         audit_log.log_admin_action(
             "create_model", None, json.dumps({"model_id": data["model_id"]}), _client_ip(request)
         )
     )
-    return await get_model_by_id(data["model_id"])
+    return {"model": model, "pending_restart": model["pending_restart"]} if model else {"error": "model not found"}
 
 
 @router.put("/models/{model_id}")
@@ -593,7 +596,8 @@ async def update_existing_model(request: Request, model_id: str):
     asyncio.create_task(
         audit_log.log_admin_action("update_model", None, json.dumps({"model_id": model_id}), _client_ip(request))
     )
-    return await get_model_by_id(model_id)
+    model = await get_model_by_id(model_id)
+    return {"model": model, "pending_restart": model["pending_restart"]} if model else {"error": "model not found"}
 
 
 @router.delete("/models/{model_id}")
@@ -757,6 +761,97 @@ async def import_models(request: Request):
     return {"imported": count}
 
 
+@router.get("/models/{model_id}/versions")
+async def get_model_versions_endpoint(request: Request, model_id: str):
+    await require_admin(request)
+    existing = await get_model_by_id(model_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Model not found")
+    return await get_model_versions(model_id)
+
+
+@router.get("/models/{model_id}/field-history/{field_name}")
+async def get_field_history_endpoint(request: Request, model_id: str, field_name: str):
+    await require_admin(request)
+    existing = await get_model_by_id(model_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Model not found")
+    return await get_model_versions_for_field(model_id, field_name)
+
+
+_REVERTABLE_FIELDS = frozenset(
+    {
+        "name",
+        "image",
+        "model_path",
+        "context_length",
+        "max_output_length",
+        "port",
+        "container_name",
+        "container_alias",
+        "model_alias",
+        "grace_period",
+        "gpu",
+        "environment",
+        "command_flags",
+    }
+)
+
+_NUMERIC_FIELDS = frozenset({"port", "context_length", "max_output_length", "grace_period"})
+
+
+def _coerce_value(field: str, value: object) -> object:
+    """Coerce revert values to correct types for the given field."""
+    if field in _NUMERIC_FIELDS:
+        if isinstance(value, str):
+            try:
+                return int(value) if "." not in value else float(value)
+            except ValueError:
+                pass
+        if isinstance(value, (int, float)):
+            return int(value) if isinstance(value, float) and value == int(value) else value
+    if field in ("environment", "command_flags") and isinstance(value, str):
+        try:
+            return json.loads(value)
+        except (json.JSONDecodeError, TypeError):
+            pass
+    return value
+
+
+@router.post("/models/{model_id}/revert-field")
+async def revert_field_endpoint(request: Request, model_id: str):
+    await require_admin(request)
+    existing = await get_model_by_id(model_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Model not found")
+    data = await request.json()
+    field = data.get("field")
+    if not field:
+        raise HTTPException(status_code=400, detail="field is required")
+    if field not in _REVERTABLE_FIELDS:
+        raise HTTPException(status_code=400, detail=f"Invalid field: {field}")
+    value = _coerce_value(field, data.get("value"))
+    await db_update_model(model_id, {field: value})
+    await reload_cache()
+    asyncio.create_task(
+        audit_log.log_admin_action(
+            "revert_field", None, json.dumps({"model_id": model_id, "field": field}), _client_ip(request)
+        )
+    )
+    model = await get_model_by_id(model_id)
+    return {"model": model, "pending_restart": model["pending_restart"]} if model else {"error": "model not found"}
+
+
+@router.post("/models/{model_id}/clear-pending-restart")
+async def clear_pending_restart_endpoint(request: Request, model_id: str):
+    await require_admin(request)
+    existing = await get_model_by_id(model_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Model not found")
+    await set_pending_restart(model_id, False)
+    return {"cleared": True}
+
+
 # --- User Config Generation ---
 
 
@@ -765,16 +860,24 @@ class GenerateConfigRequest(BaseModel):
     rotate: bool = False
 
 
-def build_opencode_config(api_key: str, model_id: str, model_name: str, context: int, output: int) -> dict:
+def build_opencode_config(
+    api_key: str,
+    model_id: str,
+    model_name: str,
+    context: int,
+    output: int,
+    base_url: str | None = None,
+) -> dict:
     """Build an opencode.json config snippet for the given user and model."""
+    url = base_url or settings.sgfleet_base_url
     return {
         "$schema": "https://opencode.ai/config.json",
         "provider": {
-            "sewingsolutions": {
+            "sgfleet": {
                 "npm": "@ai-sdk/openai-compatible",
                 "name": "SGFleet",
                 "options": {
-                    "baseURL": "https://your-gateway-domain.example.com/v1",
+                    "baseURL": url,
                     "apiKey": api_key,
                 },
                 "models": {
@@ -788,7 +891,7 @@ def build_opencode_config(api_key: str, model_id: str, model_name: str, context:
                 },
             },
         },
-        "model": f"sewingsolutions{model_id}",
+        "model": f"sgfleet-{model_id}",
         "lsp": True,
     }
 
@@ -820,7 +923,9 @@ async def generate_user_config(request: Request, user_id: int, body: GenerateCon
     model_name = default_model.get("name", default_model["model_id"])
     context_length = default_model.get("context_length", 32768)
     max_output_length = default_model.get("max_output_length", 4096)
-    config = build_opencode_config(raw_key, model_alias, model_name, context_length, max_output_length)
+    config = build_opencode_config(
+        raw_key, model_alias, model_name, context_length, max_output_length, settings.sgfleet_base_url
+    )
     return {
         "api_key": raw_key,
         "rotated": body.rotate,

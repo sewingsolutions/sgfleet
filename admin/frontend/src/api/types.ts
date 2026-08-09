@@ -130,9 +130,22 @@ export interface Model {
   gpu: string | null
   command_flags: string[]
   created_at: string
+  pending_restart?: boolean
   status?: 'running' | 'stopped' | 'starting' | 'stopping' | 'error'
   health?: ModelHealth | null
   disk_bytes?: number | null
+}
+
+export interface ModelVersion {
+  version: number
+  snapshot: Record<string, unknown>
+  created_at: string
+}
+
+export interface FieldHistoryEntry {
+  version: number
+  value: unknown
+  created_at: string
 }
 
 export interface LogEntry {

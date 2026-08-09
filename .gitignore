@@ -1,4 +1,5 @@
 .idea
+.opencode
 app/frontend_dist
 sglang-admin/app/frontend_dist
 sglang-admin/app/VERSION.txt

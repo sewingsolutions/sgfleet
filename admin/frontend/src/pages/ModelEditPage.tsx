@@ -14,6 +14,79 @@ const inputCls =
 
 const labelCls = 'text-xs text-gray-500 dark:text-gray-400 block mb-1'
 
+function FieldHistoryDropdown({ modelId, field, currentText, onSelect }: {
+  modelId: string; field: string; currentText: string; onSelect: (val: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const { data: history = [] } = useQuery({
+    queryKey: ['field-history', modelId, field],
+    queryFn: () => api.getFieldHistory(modelId, field),
+    enabled: !!modelId,
+  })
+
+  const entries = useMemo(() => {
+    const seen = new Set<string>()
+    return history.filter((e) => {
+      const txt = _historyText(e.value)
+      if (seen.has(txt)) return false
+      seen.add(txt)
+      return true
+    })
+  }, [history])
+
+  if (entries.length < 2) return null
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition cursor-pointer ml-1"
+        title="Revert to previous value"
+      >
+        <svg className="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute left-0 z-40 mt-1 w-64 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded shadow-lg max-h-48 overflow-y-auto">
+          <div className="px-3 py-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-slate-700">
+            Previous values for {field}
+          </div>
+          {entries.map((e, i) => {
+            const txt = _historyText(e.value)
+            const isCurrent = txt === currentText
+            return (
+              <button
+                key={i}
+                type="button"
+                disabled={isCurrent}
+                onClick={() => { onSelect(txt); setOpen(false) }}
+                className={`w-full text-left px-3 py-1.5 text-xs truncate transition ${
+                  isCurrent
+                    ? 'text-gray-400 dark:text-gray-600 cursor-default'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700'
+                }`}
+                title={txt}
+              >
+                {txt} <span className="text-[10px] text-gray-400">v{e.version}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function _historyText(val: unknown): string {
+  if (val === null || val === undefined) return '(null)'
+  if (typeof val === 'number') return val.toString()
+  if (typeof val === 'boolean') return val.toString()
+  if (typeof val === 'string') return val
+  return JSON.stringify(val)
+}
+
 // ─── Sub-components ─────────────────────────────────────────────────────────
 
 function SelectInput({ label, children, value, onChange }: {
@@ -154,6 +227,7 @@ export default function ModelEditPage() {
   const showToast = useToast()
   const isNew = !modelId
   const duplicateFrom = (location.state as { duplicateFrom?: string } | null)?.duplicateFrom
+  const [restartModal, setRestartModal] = useState<{ modelId: string; pending: boolean } | null>(null)
 
   const { data: existingModels = [], isPending: modelsPending } = useQuery({ queryKey: ['models'], queryFn: api.listModels })
 
@@ -167,6 +241,12 @@ export default function ModelEditPage() {
   }, [existingModels, modelId, isNew, duplicateFrom])
 
   const modelLoaded = !modelsPending
+
+  const { mutateAsync: startModel } = useMutation({
+    mutationFn: (id: string) => api.startModel(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['models'] }); showToast('Model started') },
+    onError: (e: Error) => showToast(e.message),
+  })
 
   const { mutateAsync: createModel } = useMutation({
     mutationFn: (data: Partial<Model>) => api.createModel(data),
@@ -184,15 +264,76 @@ export default function ModelEditPage() {
   if (!isNew && !model) return <div className="py-8 text-center text-red-500">Model &quot;{modelId}&quot; not found.</div>
 
   return (
-    <ModelEditForm
-      model={model} isNew={isNew} existingModels={existingModels}
-      onSubmit={async (data) => {
-        if (isNew) await createModel(data)
-        else if (model) await updateModel({ id: model.model_id, data })
-        navigate('/models')
-      }}
-      onCancel={() => navigate('/models')}
-    />
+    <>
+      <ModelEditForm
+        model={model} isNew={isNew} existingModels={existingModels}
+        onSubmit={async (data) => {
+          let pending = false
+          if (isNew) {
+            await createModel(data)
+          } else if (model) {
+            const res = await updateModel({ id: model.model_id, data })
+            pending = res.pending_restart
+          }
+          if (!isNew && pending && model) {
+            setRestartModal({ modelId: model.model_id, pending: true })
+          } else {
+            navigate('/models')
+          }
+        }}
+        onCancel={() => navigate('/models')}
+      />
+      {restartModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          onClick={() => { setRestartModal(null); navigate('/models') }}
+        >
+          <div
+            className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-md mx-4 p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 3l9.5 16.5H2.5L12 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Restart container?</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Config changes saved. Restart the container to apply them, or defer and continue running the current config.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setRestartModal(null); navigate('/models') }}
+                className="px-4 py-2 text-sm rounded bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 transition"
+              >
+                Later
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await startModel(restartModal.modelId)
+                  } catch (e) {
+                    showToast(`Restart failed: ${(e as Error).message}`)
+                    return
+                  }
+                  setRestartModal(null)
+                  navigate('/models')
+                }}
+                className="px-4 py-2 text-sm rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition"
+              >
+                Restart Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -299,56 +440,99 @@ function ModelEditForm({ model, isNew, existingModels, onSubmit, onCancel }: {
               className={inputCls} required readOnly={!isNew} disabled={!isNew} />
           </div>
           <div className={!isNew || showStep2 ? '' : 'hidden'}>
-            <label className={labelCls}>Name <span className="text-red-500">*</span></label>
+            <div className="flex items-center gap-1">
+              <label className={labelCls}>Name <span className="text-red-500">*</span></label>
+              <FieldHistoryDropdown modelId={model?.model_id || ''} field="name" currentText={form.name} onSelect={(v) => form.setName(v)} />
+            </div>
             <input type="text" value={form.name} onChange={(e) => form.setName(e.target.value)}
               className={inputCls} required />
           </div>
 
           {(!isNew || showStep2) && (
-            <SelectInput label="Context Length" value={form.contextLength}
-              onChange={(e) => form.setContextLength(e)}>
-              <option value="">auto</option>
-              {CONTEXT_LENGTH_PRESETS.map((p) => <option key={p.value} value={p.value.toString()}>{p.label}</option>)}
-            </SelectInput>
+            <div>
+              <div className="flex items-center gap-1">
+                <label className={labelCls}>Context Length</label>
+                <FieldHistoryDropdown
+                  modelId={model?.model_id || ''}
+                  field="context_length"
+                  currentText={form.contextLength}
+                  onSelect={(v) => form.setContextLength(v)}
+                />
+              </div>
+              <select value={form.contextLength} onChange={(e) => form.setContextLength(e.target.value)} className={inputCls}>
+                <option value="">auto</option>
+                {CONTEXT_LENGTH_PRESETS.map((p) => <option key={p.value} value={p.value.toString()}>{p.label}</option>)}
+              </select>
+            </div>
           )}
           {(!isNew || showStep2) && (
-            <SelectInput label="Max Output Length" value={form.maxOutputLength}
-              onChange={(e) => form.setMaxOutputLength(e)}>
-              <option value="">default</option>
-              {MAX_OUTPUT_LENGTH_PRESETS.map((p) => <option key={p.value} value={p.value.toString()}>{p.label}</option>)}
-            </SelectInput>
+            <div>
+              <div className="flex items-center gap-1">
+                <label className={labelCls}>Max Output Length</label>
+                <FieldHistoryDropdown
+                  modelId={model?.model_id || ''}
+                  field="max_output_length"
+                  currentText={form.maxOutputLength}
+                  onSelect={(v) => form.setMaxOutputLength(v)}
+                />
+              </div>
+              <select value={form.maxOutputLength} onChange={(e) => form.setMaxOutputLength(e.target.value)} className={inputCls}>
+                <option value="">default</option>
+                {MAX_OUTPUT_LENGTH_PRESETS.map((p) => <option key={p.value} value={p.value.toString()}>{p.label}</option>)}
+              </select>
+            </div>
           )}
           <div className={!isNew || showStep2 ? '' : 'hidden'}>
-            <label className={labelCls}>Port</label>
+            <div className="flex items-center gap-1">
+              <label className={labelCls}>Port</label>
+              <FieldHistoryDropdown modelId={model?.model_id || ''} field="port" currentText={form.port} onSelect={(v) => form.setPort(v)} />
+            </div>
             <input type="number" value={form.port} onChange={(e) => form.setPort(e.target.value)} className={inputCls} />
           </div>
 
           <div className={!isNew || showStep2 ? '' : 'hidden'}>
-            <label className={labelCls}>Container Name</label>
+            <div className="flex items-center gap-1">
+              <label className={labelCls}>Container Name</label>
+              <FieldHistoryDropdown modelId={model?.model_id || ''} field="container_name" currentText={form.containerName} onSelect={(v) => form.setContainerName(v)} />
+            </div>
             <input type="text" value={form.containerName} onChange={(e) => form.setContainerName(e.target.value)}
               className={inputCls} placeholder={form.modelId ? `sgfleet-${form.modelId}` : 'sgfleet-<model-id>'} />
           </div>
           <div className={!isNew || showStep2 ? '' : 'hidden'}>
-            <label className={labelCls}>Container Alias</label>
+            <div className="flex items-center gap-1">
+              <label className={labelCls}>Container Alias</label>
+              <FieldHistoryDropdown modelId={model?.model_id || ''} field="container_alias" currentText={form.containerAlias} onSelect={(v) => form.setContainerAlias(v)} />
+            </div>
             <input type="text" value={form.containerAlias} onChange={(e) => form.setContainerAlias(e.target.value)}
               className={inputCls} placeholder={form.modelId ? `sgfleet-${form.modelId}` : 'sgfleet-<model-id>'} />
           </div>
 
           <div className={!isNew || showStep2 ? '' : 'hidden'}>
-            <label className={labelCls}>Model Alias</label>
+            <div className="flex items-center gap-1">
+              <label className={labelCls}>Model Alias</label>
+              <FieldHistoryDropdown modelId={model?.model_id || ''} field="model_alias" currentText={form.modelAlias} onSelect={(v) => form.setModelAlias(v)} />
+            </div>
             <input type="text" value={form.modelAlias} onChange={(e) => form.setModelAlias(e.target.value)} className={inputCls} />
           </div>
           <div className={!isNew || showStep2 ? '' : 'hidden'}>
-            <label className={labelCls}>Grace Period (s)</label>
+            <div className="flex items-center gap-1">
+              <label className={labelCls}>Grace Period (s)</label>
+              <FieldHistoryDropdown modelId={model?.model_id || ''} field="grace_period" currentText={form.gracePeriod} onSelect={(v) => form.setGracePeriod(v)} />
+            </div>
             <input type="number" value={form.gracePeriod} onChange={(e) => form.setGracePeriod(e.target.value)} className={inputCls} />
           </div>
 
           {(!isNew || showStep2) && (
-            <SelectInput label="GPU" value={form.gpu || 'auto'}
-              onChange={(e) => form.setGpu(e)}>
-              <option value="auto">auto (all GPUs)</option>
-              {gpus.map((g) => <option key={g.index} value={g.index.toString()}>{g.name} ({g.vram_gb} GB)</option>)}
-            </SelectInput>
+            <div>
+              <div className="flex items-center gap-1">
+                <label className={labelCls}>GPU</label>
+                <FieldHistoryDropdown modelId={model?.model_id || ''} field="gpu" currentText={form.gpu || 'auto'} onSelect={(v) => form.setGpu(v)} />
+              </div>
+              <select value={form.gpu || 'auto'} onChange={(e) => form.setGpu(e.target.value)} className={inputCls}>
+                <option value="auto">auto (all GPUs)</option>
+                {gpus.map((g) => <option key={g.index} value={g.index.toString()}>{g.name} ({g.vram_gb} GB)</option>)}
+              </select>
+            </div>
           )}
 
           {(!isNew || showStep2) && (

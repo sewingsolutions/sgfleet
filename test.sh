@@ -1,4 +1,4 @@
-curl -v -k -N -X POST https://your-gateway-domain.example.com/v1/chat/completions \
+curl -v -k -N -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ${API_KEY:-sk-REPLACE-ME}" \
   -d '{

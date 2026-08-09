@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (key: string): Promise<boolean> => {
     const res = await api.login(key)
     // fetch follows 302 automatically; check final URL
-    if (res.url.includes('/admin/users')) {
+    if (res.url.includes('/admin/') && !res.url.includes('/admin/login')) {
       setAuthenticated(true)
       navigate('/users', { replace: true })
       return true

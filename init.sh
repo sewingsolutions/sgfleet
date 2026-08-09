@@ -77,7 +77,7 @@ prompt_key() {
   esac
 
   case "$name" in
-    MODELS_DIR) default="YOUR_MODELS_PATH/vllm_models";;
+    MODELS_DIR) default="/models";;
     *)          default="";;
   esac
 

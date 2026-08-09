@@ -10,7 +10,7 @@ import httpx
 logger = logging.getLogger("sgfleet-admin")
 
 SWITCH_DIR = os.environ.get("SWITCH_DIR", "/opt/switch")
-MODELS_DIR = os.environ.get("MODELS_DIR", "YOUR_MODELS_PATH/vllm_models")
+MODELS_DIR = os.environ.get("MODELS_DIR", "/models")
 CONTAINER_MODELS_DIR = "/models"
 CONTAINER_MODELS_DIR_RW = "/downloads"
 
@@ -141,6 +141,7 @@ async def start_model(model: dict, is_primary: bool = False) -> None:
     doesn't succeed within the timeout.
     """
     container_name = model["container_name"]
+    asyncio.create_task(_log_config_version(model))
     try:
         status = await get_container_status(container_name)
         already_running = bool(status and status.get("state", "running") == "running")
@@ -180,6 +181,26 @@ async def start_model(model: dict, is_primary: bool = False) -> None:
     timeout = int(model.get("startup_timeout") or DEFAULT_STARTUP_TIMEOUT)
     endpoint = f"http://{container_name}:{model['port']}"
     await _wait_for_endpoint(endpoint, timeout=timeout, label=container_name)
+
+
+async def _log_config_version(model: dict):
+    """Log the current config version for a model."""
+    try:
+        from .db import get_model_versions
+
+        versions = await get_model_versions(model["model_id"])
+        if versions:
+            latest = versions[0]
+            logger.info(
+                "Starting %s with config version %d (saved %s)",
+                model["model_id"],
+                latest["version"],
+                latest["created_at"],
+            )
+        else:
+            logger.info("Starting %s (no config version history)", model["model_id"])
+    except Exception:
+        logger.info("Starting %s", model["model_id"])
 
 
 async def _wait_for_endpoint(endpoint: str, timeout: int, label: str = "") -> None:

@@ -1,6 +1,7 @@
 import contextlib
 import hashlib
 import json
+import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC
@@ -9,6 +10,26 @@ import aiosqlite
 import bcrypt as bcrypt_lib
 
 from .config import settings
+
+logger = logging.getLogger("sgfleet-admin")
+_MAX_VERSIONS = 10
+_CONTAINER_RESTART_FIELDS = frozenset(
+    {
+        "image",
+        "model_path",
+        "port",
+        "environment",
+        "gpu",
+        "command_flags",
+        "context_length",
+        "max_output_length",
+    }
+)
+
+
+def _needs_restart(data: dict) -> bool:
+    """Check if any container-affecting fields were changed."""
+    return bool(data.keys() & _CONTAINER_RESTART_FIELDS)
 
 
 def _normalize_command_flags(raw) -> list[str]:
@@ -137,6 +158,7 @@ async def init_db():
             (10, migrate_to_v10),
             (11, migrate_to_v11),
             (12, migrate_to_v12),
+            (13, migrate_to_v13),
         ]
         for target, fn in migrations:
             if current < target:
@@ -435,6 +457,22 @@ async def migrate_to_v12(db):
     await db.commit()
 
 
+async def migrate_to_v13(db):
+    """Add model_config_versions table and pending_restart column to models."""
+    await db.execute("""CREATE TABLE IF NOT EXISTS model_config_versions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        model_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        snapshot TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (model_id) REFERENCES models(model_id)
+    )""")
+    with contextlib.suppress(Exception):
+        await db.execute("ALTER TABLE models ADD COLUMN pending_restart INTEGER DEFAULT 0")
+    await db.execute("UPDATE config SET value = ? WHERE key = ?", ("13", "migration_version"))
+    await db.commit()
+
+
 def _get_seed_models() -> list[dict]:
     """Fallback seed models when models.json is not available."""
     return [
@@ -630,6 +668,7 @@ async def get_all_models() -> list[dict]:
     for r in rows:
         d = dict(r)
         d["active"] = bool(d["active"])
+        d["pending_restart"] = bool(d.get("pending_restart", 0))
         d["environment"] = json.loads(d.get("environment", "{}"))
         d["command_flags"] = _normalize_command_flags(json.loads(d.get("command_flags", "[]")))
         result.append(d)
@@ -644,6 +683,7 @@ async def get_model_by_id(model_id: str) -> dict | None:
             return None
         d = dict(row)
         d["active"] = bool(d["active"])
+        d["pending_restart"] = bool(d.get("pending_restart", 0))
         d["environment"] = json.loads(d.get("environment", "{}"))
         d["command_flags"] = _normalize_command_flags(json.loads(d.get("command_flags", "[]")))
         return d
@@ -657,6 +697,7 @@ async def get_active_models() -> list[dict]:
     for r in rows:
         d = dict(r)
         d["active"] = True
+        d["pending_restart"] = bool(d.get("pending_restart", 0))
         d["environment"] = json.loads(d.get("environment", "{}"))
         d["command_flags"] = _normalize_command_flags(json.loads(d.get("command_flags", "[]")))
         result.append(d)
@@ -692,7 +733,17 @@ async def create_model(data: dict) -> dict:
             ),
         )
         await db.commit()
-        return await get_model_by_id(data["model_id"])  # type: ignore[return-value]
+    model = await get_model_by_id(data["model_id"])
+    if model:
+        await _save_version_inline(data["model_id"], model)
+    return model  # type: ignore[return-value]
+
+
+async def _save_version_inline(model_id: str, model: dict):
+    """Save a version snapshot (opens its own DB connection)."""
+    async with get_db() as db:
+        await _save_version(db, model_id, _model_to_snapshot(model))
+        await db.commit()
 
 
 async def update_model(model_id: str, data: dict):
@@ -740,6 +791,11 @@ async def update_model(model_id: str, data: dict):
                 (json.dumps(_normalize_command_flags(data["command_flags"])), model_id),
             )
         await db.commit()
+    model = await get_model_by_id(model_id)
+    if model:
+        await _save_version_inline(model_id, model)
+        if _needs_restart(data):
+            await set_pending_restart(model_id, True)
 
 
 async def delete_model(model_id: str):
@@ -752,6 +808,7 @@ async def delete_model(model_id: str):
             "UPDATE users SET default_model_id = NULL WHERE default_model_id = (SELECT id FROM models WHERE model_id = ?)",
             (model_id,),
         )
+        await db.execute("DELETE FROM model_config_versions WHERE model_id = ?", (model_id,))
         await db.execute("DELETE FROM models WHERE model_id = ?", (model_id,))
         await db.commit()
 
@@ -772,6 +829,7 @@ async def get_user_model_access(user_id: int) -> list[dict]:
     for r in rows:
         d = dict(r)
         d["active"] = bool(d["active"])
+        d["pending_restart"] = bool(d.get("pending_restart", 0))
         d["environment"] = json.loads(d.get("environment", "{}"))
         d["command_flags"] = _normalize_command_flags(json.loads(d.get("command_flags", "[]")))
         result.append(d)
@@ -800,16 +858,18 @@ async def bootstrap_models_from_json(json_path: str) -> int:
         raw = json.load(f)
     models_data = raw.get("models", raw if isinstance(raw, list) else [])
     count = 0
+    changed_ids = []
     async with get_db() as db:
         for m in models_data:
+            mid = m["id"]
             await db.execute(
                 """INSERT OR REPLACE INTO models
-                   (model_id, name, image, model_path, context_length, max_output_length,
-                    port, container_name, container_alias, model_alias, active, grace_period,
-                    environment, gpu, command_flags)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (model_id, name, image, model_path, context_length, max_output_length,
+                     port, container_name, container_alias, model_alias, active, grace_period,
+                     environment, gpu, command_flags)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
-                    m["id"],
+                    mid,
                     m["name"],
                     m["image"],
                     m["model_path"],
@@ -826,8 +886,13 @@ async def bootstrap_models_from_json(json_path: str) -> int:
                     json.dumps(_normalize_command_flags(m.get("command_flags", []))),
                 ),
             )
+            changed_ids.append(mid)
             count += 1
         await db.commit()
+    for mid in changed_ids:
+        model = await get_model_by_id(mid)
+        if model:
+            await _save_version_inline(mid, model)
     return count
 
 
@@ -856,6 +921,102 @@ async def export_models_to_dict() -> list[dict]:
             }
         )
     return result
+
+
+def _model_to_snapshot(m: dict) -> dict:
+    """Convert a model dict to a version snapshot (serializable)."""
+    return {
+        "model_id": m["model_id"],
+        "name": m["name"],
+        "image": m["image"],
+        "model_path": m["model_path"],
+        "context_length": m["context_length"],
+        "max_output_length": m["max_output_length"],
+        "port": m["port"],
+        "container_name": m["container_name"],
+        "container_alias": m["container_alias"],
+        "model_alias": m["model_alias"],
+        "active": m["active"],
+        "grace_period": m["grace_period"],
+        "environment": m["environment"],
+        "gpu": m["gpu"],
+        "command_flags": m["command_flags"],
+    }
+
+
+async def _save_version(db, model_id: str, snapshot: dict) -> int:
+    """Save a version snapshot and prune old versions. Returns new version number."""
+    async with db.execute(
+        "SELECT COALESCE(MAX(version), 0) + 1 FROM model_config_versions WHERE model_id = ?",
+        (model_id,),
+    ) as cursor:
+        row = await cursor.fetchone()
+        version = row[0]
+    await db.execute(
+        "INSERT INTO model_config_versions (model_id, version, snapshot) VALUES (?, ?, ?)",
+        (model_id, version, json.dumps(snapshot)),
+    )
+    await db.execute(
+        "DELETE FROM model_config_versions WHERE model_id = ? AND version < (SELECT MAX(version) - ? FROM model_config_versions WHERE model_id = ?)",
+        (model_id, _MAX_VERSIONS - 1, model_id),
+    )
+    logger.info("Saved model config version %d for %s", version, model_id)
+    return version
+
+
+async def save_model_version(model_id: str, snapshot: dict) -> int:
+    """Save a model config version (public API, opens its own DB connection)."""
+    async with get_db() as db:
+        return await _save_version(db, model_id, snapshot)
+
+
+async def get_model_versions(model_id: str) -> list[dict]:
+    """Get all versions for a model, ordered by version desc."""
+    async with (
+        get_db() as db,
+        db.execute(
+            "SELECT version, snapshot, created_at FROM model_config_versions WHERE model_id = ? ORDER BY version DESC",
+            (model_id,),
+        ) as cursor,
+    ):
+        rows = await cursor.fetchall()
+    result = []
+    for r in rows:
+        result.append(
+            {
+                "version": r[0],
+                "snapshot": json.loads(r[1]),
+                "created_at": r[2],
+            }
+        )
+    return result
+
+
+async def get_model_versions_for_field(model_id: str, field: str) -> list[dict]:
+    """Get distinct historical values for a specific field, for per-field revert dropdowns."""
+    versions = await get_model_versions(model_id)
+    seen = set()
+    result = []
+    for v in versions:
+        val = v["snapshot"].get(field)
+        val_key = (
+            json.dumps(val, sort_keys=True)
+            if not isinstance(val, (str, int, bool, type(None)))
+            else str(val)
+            if val is not None
+            else "__null__"
+        )
+        if val_key not in seen:
+            seen.add(val_key)
+            result.append({"version": v["version"], "value": val, "created_at": v["created_at"]})
+    return result
+
+
+async def set_pending_restart(model_id: str, pending: bool):
+    """Set or clear the pending_restart flag for a model."""
+    async with get_db() as db:
+        await db.execute("UPDATE models SET pending_restart = ? WHERE model_id = ?", (1 if pending else 0, model_id))
+        await db.commit()
 
 
 async def set_user_default_model(user_id: int, model_id: str | None):
@@ -888,6 +1049,7 @@ async def get_user_default_model(user_id: int) -> dict | None:
             return None
         d = dict(row)
         d["active"] = bool(d["active"])
+        d["pending_restart"] = bool(d.get("pending_restart", 0))
         d["environment"] = json.loads(d.get("environment", "{}"))
         d["command_flags"] = _normalize_command_flags(json.loads(d.get("command_flags", "[]")))
         return d

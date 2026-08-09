@@ -22,8 +22,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - .:/opt/compose:ro
       - switch_status:/opt/switch
-      - ${MODELS_DIR:-YOUR_MODELS_PATH/vllm_models}:/models:ro
-      - ${MODELS_DIR:-YOUR_MODELS_PATH/vllm_models}:/downloads
+      - ${MODELS_DIR:-/models}:/models:ro
+      - ${MODELS_DIR:-/models}:/downloads
     environment:
       - ADMIN_API_KEY=${ADMIN_API_KEY}
       - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN:-}

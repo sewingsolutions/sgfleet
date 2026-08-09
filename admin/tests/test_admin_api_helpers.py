@@ -20,15 +20,15 @@ def test_mask_key_empty():
 
 
 def test_build_opencode_config():
-    result = build_opencode_config("sk-my-key", "qwen3.6-27b", "Qwen 27B", 188416, 8192)
+    result = build_opencode_config("sk-my-key", "qwen3.6-27b", "Qwen 27B", 188416, 8192, "https://api.example.com/v1")
     assert result["$schema"] == "https://opencode.ai/config.json"
     assert result["lsp"] is True
-    assert "sewingsolutions" in result["model"]
-    provider = result["provider"]["sewingsolutions"]
+    assert result["model"] == "sgfleet-qwen3.6-27b"
+    provider = result["provider"]["sgfleet"]
     assert provider["name"] == "SGFleet"
     assert provider["npm"] == "@ai-sdk/openai-compatible"
     assert provider["options"]["apiKey"] == "sk-my-key"
-    assert provider["options"]["baseURL"] == "https://your-gateway-domain.example.com/v1"
+    assert provider["options"]["baseURL"] == "https://api.example.com/v1"
     models = provider["models"]
     assert "qwen3.6-27b" in models
     assert models["qwen3.6-27b"]["name"] == "Qwen 27B"

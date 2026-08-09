@@ -1,4 +1,4 @@
-import type { User, Stats, UserSummary, SettingsDefaults, SglModel, ModelConfig, GeneratedConfig, FleetStats, AuditEntry, RequestLogEntry, LogEntry, ModelHealth, Model, DashboardStats, GPUInfo, HFModel, HFSearchResult, DiskUsage, LocalModel, DownloadJob, DockerImagesResponse } from './types'
+import type { User, Stats, UserSummary, SettingsDefaults, SglModel, ModelConfig, GeneratedConfig, FleetStats, AuditEntry, RequestLogEntry, LogEntry, ModelHealth, Model, DashboardStats, GPUInfo, HFModel, HFSearchResult, DiskUsage, LocalModel, DownloadJob, DockerImagesResponse, ModelVersion, FieldHistoryEntry } from './types'
 
 const apiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
   const res = await fetch(`/admin${path}`, {
@@ -75,11 +75,11 @@ export const api = {
   // Model CRUD
   listModels: () => apiFetch<Model[]>('/api/models'),
   getModel: (modelId: string) => apiFetch<Model>(`/api/models/${modelId}`),
-  createModel: (model: Partial<Model>) => apiFetch<Model>(
+  createModel: (model: Partial<Model>) => apiFetch<{ model: Model; pending_restart: boolean }>(
     '/api/models',
     { method: 'POST', body: JSON.stringify(model) },
   ),
-  updateModel: (modelId: string, model: Partial<Model>) => apiFetch<Model>(
+  updateModel: (modelId: string, model: Partial<Model>) => apiFetch<{ model: Model; pending_restart: boolean }>(
     `/api/models/${modelId}`,
     { method: 'PUT', body: JSON.stringify(model) },
   ),
@@ -120,6 +120,18 @@ export const api = {
     ),
   getUserDefaultModel: (userId: number) =>
     apiFetch<Model | null>(`/api/users/${userId}/default-model`),
+
+  // Model version history
+  getModelVersions: (modelId: string) => apiFetch<ModelVersion[]>(`/api/models/${modelId}/versions`),
+  getFieldHistory: (modelId: string, field: string) =>
+    apiFetch<FieldHistoryEntry[]>(`/api/models/${modelId}/field-history/${encodeURIComponent(field)}`),
+  revertField: (modelId: string, field: string, value: unknown) =>
+    apiFetch<{ model: Model; pending_restart: boolean }>(
+      `/api/models/${modelId}/revert-field`,
+      { method: 'POST', body: JSON.stringify({ field, value }) },
+    ),
+  clearPendingRestart: (modelId: string) =>
+    apiFetch<{ cleared: boolean }>(`/api/models/${modelId}/clear-pending-restart`, { method: 'POST' }),
 
   // Audit & requests
   getAuditLog: (limit: number = 200) => apiFetch<AuditEntry[]>('/api/audit_log?limit=' + limit),
