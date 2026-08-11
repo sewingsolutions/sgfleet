@@ -462,10 +462,19 @@ def generate_model_config(hf_model: dict, target_dir: str, gpu_indices: list[int
         except (TypeError, ValueError):
             pass
 
-    # Extract relative model path from target_dir (works with both /models and /downloads mount)
+    # Compute the in-container model path used by sglang. `target_dir` may be:
+    #   - a bare name ("MuseGlimmer30bFP8")
+    #   - an absolute container path ("/downloads/foo" or "/models/foo")
+    #   - an absolute host path that leaked in ("YOUR_MODELS_PATH/vllm_models/foo")
+    # In all cases the running sglang container only sees the models under
+    # `/models/<basename>`, so anchor there rather than producing a "../.." path
+    # (which used to be written verbatim into the DB and made sglang look up the
+    # host path as a HuggingFace repo id at load time).
     rel_path = os.path.relpath(target_dir, CONTAINER_MODELS_DIR_RW)
     if rel_path.startswith(".."):
         rel_path = os.path.relpath(target_dir, CONTAINER_MODELS_DIR)
+    if rel_path.startswith("..") or os.path.isabs(rel_path):
+        rel_path = os.path.basename(target_dir.rstrip("/"))
     return {
         "model_id": short_id,
         "name": name,

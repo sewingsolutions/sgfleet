@@ -22,12 +22,15 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - .:/opt/compose:ro
       - switch_status:/opt/switch
-      - ${MODELS_DIR:-/models}:/models:ro
-      - ${MODELS_DIR:-/models}:/downloads
+      - ${MODELS_DIR:-YOUR_MODELS_PATH/vllm_models}:/models:ro
+      - ${MODELS_DIR:-YOUR_MODELS_PATH/vllm_models}:/downloads
     environment:
       - ADMIN_API_KEY=${ADMIN_API_KEY}
       - SGFLEET_BASE_URL=${SGFLEET_BASE_URL:-}
       - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN:-}
+      # Host path used when the admin spawns model containers via the docker
+      # socket. Must match the source of the bind mount above.
+      - HOST_MODELS_DIR=${MODELS_DIR:-YOUR_MODELS_PATH/vllm_models}
   alloy:
     image: grafana/alloy:latest
     container_name: sgfleet-alloy

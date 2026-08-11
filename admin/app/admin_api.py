@@ -1639,6 +1639,11 @@ async def download_stream(request: Request, model_id: str, target_dir: str, expe
     if not target_dir:
         raise HTTPException(status_code=400, detail="target_dir is required")
 
+    # If the caller sent a raw host path, collapse to the basename so it lands
+    # under the container's /downloads mount instead of escaping it.
+    if os.path.isabs(target_dir):
+        target_dir = os.path.basename(target_dir.rstrip("/"))
+
     # Path traversal guard (use RW mount for downloads)
     real = os.path.realpath(CONTAINER_MODELS_DIR_RW)
     abs_target = os.path.realpath(os.path.join(CONTAINER_MODELS_DIR_RW, target_dir))
@@ -1749,6 +1754,11 @@ async def create_model_from_download(request: Request):
     target_dir = data.get("target_dir", "")
     gpu_indices = data.get("gpu_indices", [])
 
+    # Normalize absolute paths to their basename so a raw host path (e.g. from a
+    # copy/paste of MODELS_DIR) can't slip past the traversal guard via
+    # os.path.join discarding the base when its second arg is absolute.
+    if os.path.isabs(target_dir):
+        target_dir = os.path.basename(target_dir.rstrip("/"))
     # Path traversal guard (use RW mount - both /models and /downloads map to same host path)
     real = os.path.realpath(CONTAINER_MODELS_DIR_RW)
     abs_target = os.path.realpath(os.path.join(CONTAINER_MODELS_DIR_RW, target_dir))

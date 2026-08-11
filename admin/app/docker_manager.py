@@ -10,7 +10,13 @@ import httpx
 logger = logging.getLogger("sgfleet-admin")
 
 SWITCH_DIR = os.environ.get("SWITCH_DIR", "/opt/switch")
-MODELS_DIR = os.environ.get("MODELS_DIR", "/models")
+# Host-side path to the models directory. Used as the bind source when spawning
+# model containers via the docker daemon (which resolves paths on the host, not
+# inside the admin container). Defaults to the documented path so setups that
+# don't explicitly set this still produce correct binds.
+MODELS_DIR = os.environ.get("HOST_MODELS_DIR") or os.environ.get(
+    "MODELS_DIR", "YOUR_MODELS_PATH/vllm_models"
+)
 CONTAINER_MODELS_DIR = "/models"
 CONTAINER_MODELS_DIR_RW = "/downloads"
 

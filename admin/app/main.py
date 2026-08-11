@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import time
 from contextlib import asynccontextmanager, suppress
 
@@ -128,6 +129,27 @@ async def _start_model_sync():
     try:
         await asyncio.sleep(1)
         models = await get_all_models()
+        # Heal stale model_path values that point at the host directory
+        # (e.g. "YOUR_MODELS_PATH/vllm_models/foo") instead of the in-container
+        # "/models/foo". These entries can be created by older admin versions
+        # and would cause sglang to hand the string to HuggingFace as a repo id.
+        try:
+            from .db import update_model as _update_model_path
+
+            for _m in models:
+                _mp = _m.get("model_path") or ""
+                if _mp.startswith("/") and not _mp.startswith("/models/"):
+                    _fixed = f"/models/{os.path.basename(_mp.rstrip('/'))}"
+                    logger.warning(
+                        "Rewriting stale model_path for %s: %s -> %s",
+                        _m.get("model_id"),
+                        _mp,
+                        _fixed,
+                    )
+                    await _update_model_path(_m["model_id"], {"model_path": _fixed})
+                    _m["model_path"] = _fixed
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning("model_path self-heal skipped: %s", e)
         # Load the cache first so admin API responses have model metadata even
         # while containers are still coming up.
         await reload_cache()

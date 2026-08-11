@@ -16,7 +16,7 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # ── Key order ────────────────────────────────────────────────────────
-KEY_NAMES=(ADMIN_API_KEY SGFLEET_BASE_URL MODELS_DIR HUGGINGFACE_TOKEN PROMETHEUS_HOST)
+KEY_NAMES=(ADMIN_API_KEY SGFLEET_BASE_URL MODELS_DIR HOST_MODELS_DIR HUGGINGFACE_TOKEN PROMETHEUS_HOST)
 
 # ── Load existing .env into associative array ────────────────────────
 declare -A existing_values
@@ -73,6 +73,7 @@ prompt_key() {
     ADMIN_API_KEY)     desc="Admin API key (dashboard login)";;
     SGFLEET_BASE_URL)  desc="External gateway URL (used in generated configs)";;
     MODELS_DIR)        desc="Host directory for model files";;
+    HOST_MODELS_DIR)   desc="Host path used for spawned model container binds (leave empty to reuse MODELS_DIR)";;
     HUGGINGFACE_TOKEN) desc="HuggingFace API token (gated models)";;
     PROMETHEUS_HOST)   desc="Prometheus host (leave empty to disable metrics)";;
   esac

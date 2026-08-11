@@ -64,6 +64,22 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
     setExpanded(true)
   }
 
+  const ensureDraft = () => {
+    if (draft) return draft
+    const initial: Draft = {
+      name: user.name,
+      rate_limit: user.rate_limit,
+      max_concurrent: user.max_concurrent,
+      request_cost: user.request_cost ?? 0.001,
+      daily_quota: user.daily_quota?.toString() ?? '',
+      email: user.email ?? '',
+      notes: user.notes ?? '',
+      default_model_id: defaultModel?.model_id ?? '',
+    }
+    setDraft(initial)
+    return initial
+  }
+
   const handleSave = async () => {
     if (!draft) return
     setSaving(true)
@@ -264,7 +280,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
             <input
               type="text"
               value={draft?.name ?? user.name}
-              onChange={(e) => draft && setDraft({ ...draft, name: e.target.value })}
+              onChange={(e) => setDraft({ ...ensureDraft(), name: e.target.value })}
               className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-center focus:border-indigo-500 focus:outline-none text-sm"
             />
           </div>
@@ -277,7 +293,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
                 min={0.5}
                 max={20}
                 step={0.5}
-                onChange={(e) => draft && setDraft({ ...draft, rate_limit: parseFloat(e.target.value) || 0 })}
+                onChange={(e) => setDraft({ ...ensureDraft(), rate_limit: parseFloat(e.target.value) || 0 })}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-center focus:border-indigo-500 focus:outline-none text-sm"
               />
             </div>
@@ -288,7 +304,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
                 value={draft?.max_concurrent ?? user.max_concurrent}
                 min={1}
                 max={10}
-                onChange={(e) => draft && setDraft({ ...draft, max_concurrent: parseInt(e.target.value) || 1 })}
+                onChange={(e) => setDraft({ ...ensureDraft(), max_concurrent: parseInt(e.target.value) || 1 })}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-center focus:border-indigo-500 focus:outline-none text-sm"
               />
             </div>
@@ -300,7 +316,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
                 min={0.0001}
                 max={1}
                 step={0.0001}
-                onChange={(e) => draft && setDraft({ ...draft, request_cost: parseFloat(e.target.value) || 0 })}
+                onChange={(e) => setDraft({ ...ensureDraft(), request_cost: parseFloat(e.target.value) || 0 })}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-center focus:border-indigo-500 focus:outline-none text-sm"
               />
             </div>
@@ -311,7 +327,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
                 value={draft?.daily_quota ?? (user.daily_quota?.toString() ?? '')}
                 placeholder="Unlimited"
                 min={1}
-                onChange={(e) => draft && setDraft({ ...draft, daily_quota: e.target.value })}
+                onChange={(e) => setDraft({ ...ensureDraft(), daily_quota: e.target.value })}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-center focus:border-indigo-500 focus:outline-none placeholder-gray-400 dark:placeholder-gray-500 text-sm"
               />
             </div>
@@ -323,7 +339,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
                 type="email"
                 value={draft?.email ?? (user.email ?? '')}
                 placeholder="user@example.com"
-                onChange={(e) => draft && setDraft({ ...draft, email: e.target.value })}
+                onChange={(e) => setDraft({ ...ensureDraft(), email: e.target.value })}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-center focus:border-indigo-500 focus:outline-none placeholder-gray-400 dark:placeholder-gray-500 text-sm"
               />
             </div>
@@ -333,7 +349,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
                 type="text"
                 value={draft?.notes ?? (user.notes ?? '')}
                 placeholder="Internal notes..."
-                onChange={(e) => draft && setDraft({ ...draft, notes: e.target.value })}
+                onChange={(e) => setDraft({ ...ensureDraft(), notes: e.target.value })}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-center focus:border-indigo-500 focus:outline-none placeholder-gray-400 dark:placeholder-gray-500 text-sm"
               />
             </div>
@@ -343,7 +359,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
               <label className="text-xs text-gray-400 dark:text-gray-500 block mb-1">Default Model</label>
               <select
                 value={draft?.default_model_id ?? (defaultModel?.model_id ?? '')}
-                onChange={(e) => draft && setDraft({ ...draft, default_model_id: e.target.value })}
+                onChange={(e) => setDraft({ ...ensureDraft(), default_model_id: e.target.value })}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-center focus:border-indigo-500 focus:outline-none text-sm"
               >
                 <option value="">No default</option>
