@@ -245,12 +245,14 @@ async def stop_model(model: dict, grace_period: int | None = None) -> None:
     await _stop_container(container_name, gp)
 
 
-async def ensure_models_sync(all_models: list[dict]) -> set[str]:
+async def ensure_models_sync(all_models: list[dict], mark_ready_fn=None, mark_not_ready_fn=None) -> set[str]:
     """Reconcile running containers with configured models.
 
     Returns the set of model_ids whose containers are up AND passed the health
-    check. Callers should use this to gate cache exposure so the gateway only
-    routes to models that are truly ready.
+    check. If mark_ready_fn/mark_not_ready_fn are provided, they are called
+    incrementally as each model passes/fails its health check, allowing the
+    gateway to route to models as soon as they are ready rather than waiting
+    for all models to complete.
     """
     Path(SWITCH_DIR).mkdir(parents=True, exist_ok=True)
 
@@ -261,6 +263,8 @@ async def ensure_models_sync(all_models: list[dict]) -> set[str]:
 
     for m in inactive_models:
         await stop_model(m)
+        if mark_not_ready_fn:
+            mark_not_ready_fn(m["model_id"])
 
     await _stop_all_stray_containers(known_names)
 
@@ -274,9 +278,13 @@ async def ensure_models_sync(all_models: list[dict]) -> set[str]:
         try:
             await start_model(m, is_primary)
             ready_ids.add(m["model_id"])
+            if mark_ready_fn:
+                mark_ready_fn(m["model_id"])
         except ModelError as e:
             failures[m["model_id"]] = str(e)
             logger.error("Model %s failed to become ready: %s", m["model_id"], e)
+            if mark_not_ready_fn:
+                mark_not_ready_fn(m["model_id"])
 
     if primary_model:
         _write_status(

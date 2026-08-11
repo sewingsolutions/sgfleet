@@ -655,7 +655,9 @@ async def toggle_model_endpoint(request: Request, model_id: str):
     await db_update_model(model_id, {"active": new_active})
     await reload_cache()
     if new_active:
-        ready = await ensure_models_sync(await get_all_models())
+        ready = await ensure_models_sync(
+            await get_all_models(), mark_ready_fn=mark_ready, mark_not_ready_fn=mark_not_ready
+        )
         set_ready_ids(ready)
     else:
         await docker_stop_model(m)
@@ -1287,13 +1289,10 @@ async def get_model_health(request: Request, model_id: str | None = None):
     else:
         status = "healthy"
 
-    # Keep the gateway registry in sync with the observed health so that a
-    # model which came up late (or crashed and recovered) automatically
-    # becomes routable / stops being routed to.
-    if status == "healthy" and m.get("active"):
-        mark_ready(m["model_id"])
-    elif status in {"unreachable", "unhealthy"}:
-        mark_not_ready(m["model_id"])
+    # Note: do NOT mark_ready/mark_not_ready here. This endpoint is polled
+    # by the frontend and a single transient timeout should not remove a
+    # healthy model from the gateway's ready set. The gateway handles
+    # mark_not_ready on DNS/connect failures when proxying real requests.
 
     container = await get_container_status(container_name)
 

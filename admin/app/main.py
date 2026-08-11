@@ -17,7 +17,7 @@ from .docker_manager import ensure_models_sync
 from .gateway import authenticate_user, create_gateway_router, create_passthrough_router, httpx_passthrough, httpx_pool
 from .logging import setup_logging
 from .metrics_api import router as metrics_api_router
-from .model_registry import reload_cache, set_ready_ids
+from .model_registry import mark_not_ready, mark_ready, reload_cache, set_ready_ids
 from .prometheus_metrics import handler as prometheus_handler
 
 logger = setup_logging()
@@ -129,15 +129,18 @@ async def _start_model_sync():
         await asyncio.sleep(1)
         models = await get_all_models()
         # Load the cache first so admin API responses have model metadata even
-        # while containers are still coming up. The ready set (empty by default)
-        # keeps the gateway from routing to them prematurely.
+        # while containers are still coming up.
         await reload_cache()
+        # Clear ready set before sync - on fresh startup it's already empty,
+        # but this ensures stale state from a previous run is cleared.
         set_ready_ids(set())
         if models:
-            ready = await ensure_models_sync(models)
+            # Use incremental mark_ready so models become routable as soon as
+            # they pass their health check, rather than waiting for all models
+            # to complete. This minimizes the 503 window during startup.
+            ready = await ensure_models_sync(models, mark_ready_fn=mark_ready, mark_not_ready_fn=mark_not_ready)
             # Refresh cache in case sync mutated status/metadata.
             await reload_cache()
-            set_ready_ids(ready)
             logger.info(
                 "Model sync completed. Ready models: %s",
                 sorted(ready) or "<none>",
