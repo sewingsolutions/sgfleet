@@ -47,6 +47,8 @@ export default function ModelsPage() {
   const { data: models = [], isLoading } = useQuery<Model[], Error>({
     queryKey: ['models'],
     queryFn: api.listModels,
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   })
 
   const healthInterval = intervals[intervalIdx]
@@ -59,11 +61,31 @@ export default function ModelsPage() {
           .then((h) => {
             setHealthCache((prev) => ({ ...prev, [h.model_id]: h }))
           })
-          .catch(() => {})
+          .catch(() => {
+            setHealthCache((prev) => {
+              const next = { ...prev }
+              delete next[m.model_id]
+              return next
+            })
+          })
       })
     }, healthInterval)
     return () => clearInterval(id)
   }, [healthInterval, models])
+
+  // Clean up stale health entries when models list changes
+  useEffect(() => {
+    const modelIds = new Set(models.map((m) => m.model_id))
+    setHealthCache((prev) => {
+      const stale = Object.keys(prev).find((k) => !modelIds.has(k))
+      if (!stale) return prev
+      const next = { ...prev }
+      for (const k of Object.keys(next)) {
+        if (!modelIds.has(k)) delete next[k]
+      }
+      return next
+    })
+  }, [models])
 
   const refreshInvalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['models'] })

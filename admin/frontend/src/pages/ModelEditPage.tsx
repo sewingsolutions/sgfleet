@@ -34,19 +34,22 @@ function FieldHistoryDropdown({ modelId, field, currentText, onSelect }: {
     })
   }, [history])
 
-  if (entries.length < 2) return null
+  if (entries.length === 0) return null
+
+  const currentVersion = entries[entries.length - 1].version
 
   return (
     <div className="relative">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition cursor-pointer ml-1"
-        title="Revert to previous value"
+        className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition cursor-pointer ml-1 flex items-center gap-0.5"
+        title="Field history"
       >
         <svg className="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
+        <span className="font-medium">v{currentVersion}</span>
       </button>
       {open && (
         <div className="absolute left-0 z-40 mt-1 w-64 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded shadow-lg max-h-48 overflow-y-auto">
@@ -70,6 +73,7 @@ function FieldHistoryDropdown({ modelId, field, currentText, onSelect }: {
                 title={txt}
               >
                 {txt} <span className="text-[10px] text-gray-400">v{e.version}</span>
+                {isCurrent && <span className="text-[10px] text-indigo-500 ml-1">(current)</span>}
               </button>
             )
           })}
@@ -137,28 +141,39 @@ function KeyValueEditor({ items, onChange, label, placeholderKey, placeholderVal
   )
 }
 
-function FlagPicker({ onSelect }: { onSelect: (flag: { name: string; type: string; defaultValue?: string; options?: string[] }) => void }) {
+function FlagCategorySection({ category, onSelect }: {
+  category: string; onSelect: (flag: { name: string; type: string; defaultValue?: string; options?: string[] }) => void
+}) {
   const [open, setOpen] = useState(false)
-  const [category, setCategory] = useState(SGLANG_FLAG_CATEGORIES[0] || '')
+  const flags = useMemo(() => SGLANG_FLAGS.filter((f) => f.category === category), [category])
 
   return (
-    <div className="col-span-3 relative">
-      <button type="button" onClick={() => setOpen(!open)}
-        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-sm text-left hover:border-indigo-400 transition">
-        Pick SGLang flag…
+    <div className="border border-gray-200 dark:border-slate-700 rounded">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition"
+      >
+        <span className="font-medium">{category}</span>
+        <span className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{flags.length}</span>
+          <svg className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </span>
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded shadow-lg max-h-80 overflow-y-auto">
-          <div className="p-2 border-b border-gray-200 dark:border-slate-700">
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
-              {SGLANG_FLAG_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-          {SGLANG_FLAGS.filter((f) => f.category === category).map((f) => (
-            <button key={f.name} type="button" onClick={() => { onSelect(f); setOpen(false) }}
-              className="w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-slate-700 text-sm text-gray-800 dark:text-gray-200 flex items-start gap-2">
-              <code className="shrink-0 text-indigo-600 dark:text-indigo-400 font-mono text-xs">{f.name}</code>
-              <span className="text-xs text-gray-500 dark:text-gray-400">{f.description}</span>
+        <div className="px-3 pb-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
+          {flags.map((f) => (
+            <button
+              key={f.name}
+              type="button"
+              onClick={() => { onSelect(f); setOpen(false) }}
+              className="text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-xs text-gray-700 dark:text-gray-300 flex items-start gap-2 transition"
+              title={f.description}
+            >
+              <code className="shrink-0 text-indigo-600 dark:text-indigo-400 font-mono">{f.name}</code>
+              <span className="text-gray-500 dark:text-gray-400">{f.description}</span>
             </button>
           ))}
         </div>
@@ -540,12 +555,31 @@ function ModelEditForm({ model, isNew, existingModels, onSubmit, onCancel }: {
               <KeyValueEditor label="Environment Variables" items={form.envVars} onChange={form.setEnvVars}
                 placeholderKey="KEY" placeholderValue="VALUE" addLabel="Add variable" />
 
-              <label className="col-span-3 text-xs text-gray-500 dark:text-gray-400 block mb-1">Command Flags</label>
-              <p className="col-span-3 text-[11px] text-gray-400 dark:text-gray-500 mb-2">
-                Each row is one flag. Put the flag name (e.g. <code>--context-length</code>) in the left field and
-                its argument (e.g. <code>170124</code>) in the right field. Boolean flags leave the value empty.
-              </p>
-              <FlagPicker onSelect={handleFlagPick} />
+              <div className="col-span-3">
+                <div className="flex items-center gap-2">
+                  <label className={labelCls}>Command Flags</label>
+                  <a
+                    href="https://docs.sglang.io/docs/advanced_features/server_arguments"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-indigo-500 hover:text-indigo-400 dark:text-indigo-400 dark:hover:text-indigo-300 transition"
+                    title="View SGLang server arguments documentation"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                </div>
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-2">
+                  Each row is one flag. Put the flag name (e.g. <code>--context-length</code>) in the left field and
+                  its argument (e.g. <code>170124</code>) in the right field. Boolean flags leave the value empty.
+                </p>
+                <div className="space-y-1 mb-3">
+                  {SGLANG_FLAG_CATEGORIES.map((cat) => (
+                    <FlagCategorySection key={cat} category={cat} onSelect={handleFlagPick} />
+                  ))}
+                </div>
+              </div>
               <div className="col-span-3">
                 <div className="space-y-2">
                   {form.commandFlags.map((f, i) => (
