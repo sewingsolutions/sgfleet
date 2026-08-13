@@ -71,6 +71,39 @@ const UserStatCard = ({ u }: { u: { user: string; p50: number; p95: number; c429
   </div>
 )
 
+const dashboards = [
+  {
+    name: 'SGLang Dashboard',
+    desc: 'Model-level metrics: latency, throughput, KV cache, GPU utilization, and more.',
+    file: '/admin/dashboards/sglang-dashboard.json',
+  },
+  {
+    name: 'SGLang Gateway Metrics',
+    desc: 'Gateway-level metrics: requests, auth failures, rate limits, per-user breakdown.',
+    file: '/admin/dashboards/sglang-gateway-metrics.json',
+  },
+]
+
+function DashboardCard({ name, desc, file }: { name: string; desc: string; file: string }) {
+  return (
+    <div className={card}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h4 className="text-sm font-medium text-gray-900 dark:text-white truncate">{name}</h4>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{desc}</p>
+        </div>
+        <a
+          href={file}
+          download
+          className="flex-shrink-0 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded text-white text-xs transition"
+        >
+          Download
+        </a>
+      </div>
+    </div>
+  )
+}
+
 export default function MetricsPage() {
   const { data: users = [], isLoading: loadingUsers } = useGetUsers()
   const [view, setView] = useState<'fleet' | 'user'>('fleet')
@@ -124,6 +157,14 @@ export default function MetricsPage() {
 
   return (
     <div>
+      <div className="mb-6">
+        <h3 className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-2 sm:mb-3">Grafana Dashboards</h3>
+        <p className="text-xs text-gray-400 dark:text-gray-500 mb-3">Download and import these JSON files into your Grafana instance to monitor SGLang and gateway metrics.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {dashboards.map((d) => <DashboardCard key={d.name} {...d} />)}
+        </div>
+      </div>
+
       <div className="flex flex-col sm:flex-row gap-3 mb-6 items-stretch sm:items-center">
         <div className="flex gap-1 bg-gray-50 dark:bg-slate-800 rounded-lg p-1">
           <button
