@@ -26,7 +26,7 @@ export default function ConfigModal({ userId, userName, onClose }: ConfigModalPr
       setApiKey(result.api_key)
       setRotated(result.rotated || false)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to generate config')
+      showToast(err instanceof Error ? err.message : 'Failed to generate config')
     } finally {
       setGenerating(false)
     }

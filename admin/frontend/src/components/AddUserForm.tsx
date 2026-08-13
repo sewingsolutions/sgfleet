@@ -20,7 +20,7 @@ export default function AddUserForm({ onCreated }: AddUserFormProps) {
       setName('')
       setTimeout(onCreated, 2000)
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to create user')
+      showToast(err instanceof Error ? err.message : 'Failed to create user')
     }
   }
 

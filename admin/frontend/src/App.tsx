@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import ToastProvider from './components/Toast'
+import ConfirmProvider from './components/ConfirmProvider'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import LoginPage from './pages/LoginPage'
@@ -22,7 +23,8 @@ function App() {
     <BrowserRouter basename="/admin">
       <AuthProvider>
         <ToastProvider>
-          <Routes>
+          <ConfirmProvider>
+            <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<ProtectedRoute><Layout><DashboardPage /></Layout></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><Layout><UsersPage /></Layout></ProtectedRoute>} />
@@ -37,7 +39,8 @@ function App() {
             <Route path="/logs" element={<ProtectedRoute><Layout><LogsPage /></Layout></ProtectedRoute>} />
             <Route path="/audit" element={<ProtectedRoute><Layout><AuditPage /></Layout></ProtectedRoute>} />
             <Route path="/version" element={<ProtectedRoute><Layout><VersionPage /></Layout></ProtectedRoute>} />
-          </Routes>
+            </Routes>
+          </ConfirmProvider>
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>

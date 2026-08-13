@@ -359,6 +359,7 @@ function ModelEditForm({ model, isNew, existingModels, onSubmit, onCancel }: {
   onSubmit: (data: Partial<Model>) => Promise<void>; onCancel: () => void
 }) {
   const form = useModelForm(model)
+  const showToast = useToast()
   const showStep2 = !isNew || form.modelPath
 
   const { data: localModels = [] } = useQuery({ queryKey: ['local-models'], queryFn: api.listLocalModels })
@@ -402,7 +403,7 @@ function ModelEditForm({ model, isNew, existingModels, onSubmit, onCancel }: {
     if (!form.modelId || !form.name || !form.image || !form.modelPath) return
     const conflict = existingModels.find(
       (m) => m.name.trim().toLowerCase() === form.name.trim().toLowerCase() && m.model_id !== (model?.model_id || ''))
-    if (conflict) { alert(`A model with the name "${form.name}" already exists.`); return }
+    if (conflict) { showToast(`A model with the name "${form.name}" already exists.`); return }
     form.setSaving(true)
     try { await onSubmit(form.buildPayload()) } finally { form.setSaving(false) }
   }

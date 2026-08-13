@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useUpdateUserMutation, useRotateKeyMutation, useDeleteUserMutation } from '../hooks/useUsers'
 import { useToast } from '../hooks/useToast'
+import { useConfirm } from '../hooks/useConfirm'
 import ConfigModal from './ConfigModal'
 import type { User, Model } from '../api/types'
 
@@ -41,6 +42,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
   const [saving, setSaving] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null)
   const showToast = useToast()
+  const confirmAction = useConfirm()
   const { mutateAsync: updateUser } = useUpdateUserMutation()
   const { mutateAsync: rotateKey } = useRotateKeyMutation()
   const { mutateAsync: deleteUser } = useDeleteUserMutation()
@@ -125,7 +127,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
   }
 
   const handleDelete = async () => {
-    if (!confirm(`Delete ${user.name}?`)) return
+    if (!await confirmAction(`Delete ${user.name}?`, true)) return
     await deleteUser(user.id)
   }
 

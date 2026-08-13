@@ -5,6 +5,7 @@ import { useRef, useCallback, useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import { useToast } from '../hooks/useToast'
+import { useConfirm } from '../hooks/useConfirm'
 import type { Webhook, ModelConfig } from '../api/types'
 
 const formatUptime = (s: number) => {
@@ -18,6 +19,8 @@ const formatUptime = (s: number) => {
 
 export default function SettingsPage() {
   const { logout } = useAuth()
+  const confirmAction = useConfirm()
+  const showToast = useToast()
   const { data: defaults } = useGetSettingsDefaults()
   const { mutateAsync: updateDefaults, isPending } = useUpdateSettingsDefaultsMutation()
   const rateLimitRef = useRef<HTMLInputElement>(null)
@@ -95,18 +98,18 @@ export default function SettingsPage() {
       setExportJson(String(res.json))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      alert(`Export failed: ${msg}`)
+      showToast(`Export failed: ${msg}`)
     }
   }
 
   const handleRotateAdminKey = async () => {
-    if (!confirm('Rotate admin key? The CURRENT key will be invalidated immediately. Make sure to copy the new key!')) return
+    if (!await confirmAction('Rotate admin key? The CURRENT key will be invalidated immediately. Make sure to copy the new key!', true)) return
     try {
       const res = await api.fetchPost('/api/settings/rotate_admin_key', {})
       setNewAdminKey(String(res.new_key))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
-      alert(`Rotation failed: ${msg}`)
+      showToast(`Rotation failed: ${msg}`)
     }
   }
 
@@ -307,8 +310,8 @@ export default function SettingsPage() {
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{w.url}</p>
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Events: {w.events.join(', ')}</p>
               </div>
-              <button onClick={() => {
-                if (!confirm(`Delete webhook "${w.name}"?`)) return
+              <button onClick={async () => {
+                if (!await confirmAction(`Delete webhook "${w.name}"?`, true)) return
                 api.fetchDelete(`/api/webhooks/${w.id}`)
                 setWebhooks(webhooks.filter(x => x.id !== w.id))
               }} className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-sm transition">
@@ -360,7 +363,7 @@ export default function SettingsPage() {
       <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-3 sm:p-6 border border-gray-200 dark:border-slate-700">
         <h3 className="text-base sm:text-lg text-gray-900 dark:text-white mb-3 sm:mb-4">Danger Zone</h3>
         <button
-          onClick={() => { if (confirm('Log out?')) logout() }}
+          onClick={async () => { if (await confirmAction('Log out?', true)) logout() }}
           className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-gray-900 dark:text-white text-sm transition"
         >
           Log Out

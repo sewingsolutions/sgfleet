@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { Model, User, ModelHealth } from '../api/types'
 import { useToast } from '../hooks/useToast'
+import { useConfirm } from '../hooks/useConfirm'
 
 const statusColor = (s?: string) => {
   if (s === 'running') return 'bg-emerald-500'
@@ -39,6 +40,7 @@ export default function ModelsPage() {
   const singleFileRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const queryClient = useQueryClient()
   const showToast = useToast()
+  const confirmAction = useConfirm()
   const navigate = useNavigate()
 
   const intervals = [0, 10_000, 30_000, 60_000]
@@ -225,7 +227,7 @@ export default function ModelsPage() {
   }
 
   const handleDelete = async (m: Model) => {
-    if (!confirm(`Delete model "${m.name}" (${m.model_id})?`)) return
+    if (!await confirmAction(`Delete model "${m.name}" (${m.model_id})?`, true)) return
     setBusy((p) => ({ ...p, [m.model_id]: 'deleting' }))
     showToast(`Deleting ${m.name}…`)
     try {
@@ -256,7 +258,7 @@ export default function ModelsPage() {
   }
 
   const handleStop = async (m: Model) => {
-    if (!confirm(`Stop "${m.name}"?`)) return
+    if (!await confirmAction(`Stop "${m.name}"?`, true)) return
     setBusy((p) => ({ ...p, [m.model_id]: 'stopping' }))
     showToast(`Stopping ${m.name}…`)
     const t0 = Date.now()
@@ -661,9 +663,21 @@ export default function ModelsPage() {
               <h2 className="text-sm font-medium text-gray-900 dark:text-white">Model JSON</h2>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(jsonModalContent)
-                    showToast('Copied to clipboard')
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    try {
+                      const ta = document.createElement('textarea')
+                      ta.value = jsonModalContent
+                      ta.style.position = 'fixed'
+                      ta.style.opacity = '0'
+                      document.body.appendChild(ta)
+                      ta.select()
+                      document.execCommand('copy')
+                      document.body.removeChild(ta)
+                      showToast('Copied to clipboard')
+                    } catch {
+                      showToast('Failed to copy')
+                    }
                   }}
                   className="px-2 py-1 text-xs rounded bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 transition"
                 >
