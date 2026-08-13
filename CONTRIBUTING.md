@@ -20,6 +20,12 @@ npm run dev
 
 Start services: `docker compose up -d` from the repo root.
 
+## Project scope
+
+SGFleet is purpose-built for single-node Docker environments running SGLang. PRs that extend the project to Kubernetes, multi-node orchestration, or alternative inference backends are out of scope and will not be merged.
+
+Contributions that improve the existing single-node Docker + SGLang workflow — model management, auth, rate limiting, monitoring, and the admin dashboard — are welcome.
+
 ## Before submitting
 
 - Backend: `ruff check app/` and `python3 -m pytest tests/` pass
