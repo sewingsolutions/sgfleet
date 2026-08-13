@@ -14,6 +14,7 @@ export const CONTEXT_LENGTH_PRESETS = [
   { label: '48K', value: 49152 },
   { label: '64K', value: 65536 },
   { label: '128K', value: 131072 },
+  { label: '192K', value: 196608 },
   { label: '256K', value: 262144 },
 ]
 
