@@ -7,73 +7,94 @@ on:
     branches: [master]
 
 jobs:
-  ci:
+  backend-lint:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: pip install -r requirements.txt
+        working-directory: backend
+      - run: python3 -m ruff check app/ tests/
+        working-directory: backend
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
+  backend-format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+        working-directory: backend
+      - run: python3 -m ruff format --check app/ tests/
+        working-directory: backend
+
+  backend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+        working-directory: backend
+      - run: python3 -m pytest tests/ -v --ignore=tests/test_integration.py
+        working-directory: backend
+
+  frontend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Install backend dependencies
-        working-directory: backend
-        run: pip install -r requirements.txt
-
-      - name: Backend lint
-        working-directory: backend
-        run: python3 -m ruff check app/ tests/
-
-      - name: Backend format check
-        working-directory: backend
-        run: python3 -m ruff format --check app/ tests/
-
-      - name: Backend tests
-        working-directory: backend
-        timeout-minutes: 10
-        run: python3 -m pytest tests/ -v --ignore=tests/test_integration.py
-
-      - name: Install frontend dependencies
+      - run: npm ci
         working-directory: frontend
-        run: npm ci
-
-      - name: Frontend lint
+      - run: npm run lint
         working-directory: frontend
-        run: npm run lint
 
-      - name: Frontend tests
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
         working-directory: frontend
-        run: npx vitest run
-
-      - name: Frontend build
+      - run: npx vitest run
         working-directory: frontend
-        run: npm run build
 
-      - name: Set up Docker Compose
-        run: |
-          DOCKER_COMPOSE_VERSION=$(docker compose version --short)
-          echo "Docker Compose version: $DOCKER_COMPOSE_VERSION"
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
 
-      - name: Docker Compose config validation
-        run: docker compose config --quiet
+  dockerfile-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          curl -fsSL https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint && chmod +x /usr/local/bin/hadolint
+      - run: hadolint backend/Dockerfile
+      - run: hadolint frontend/Dockerfile
+
+  docker-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config --quiet
         env:
           SGFLEET_ENCRYPTION_KEY: dummy
           MODELS_DIR: /tmp/models
           LOGS_DIR: /tmp/logs
-
-      - name: Set up hadolint
-        run: |
-          curl -fsSL https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint && chmod +x /usr/local/bin/hadolint
-
-      - name: Lint backend Dockerfile
-        run: hadolint backend/Dockerfile
-
-      - name: Lint frontend Dockerfile
-        run: hadolint frontend/Dockerfile
