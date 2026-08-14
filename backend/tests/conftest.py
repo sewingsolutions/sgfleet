@@ -1,11 +1,57 @@
 import contextlib
 import os
 import tempfile
+import threading
 
 import pytest
 
 os.environ.setdefault("ADMIN_API_KEY", "test-secret-key-for-testing")
 os.environ.setdefault("SGFLEET_ENCRYPTION_KEY", "0" * 64)
+
+
+# ---------------------------------------------------------------------------
+# Force aiosqlite connection worker threads to be daemon threads.
+#
+# pytest-asyncio creates and tears down a fresh event loop per test. If code
+# under test spawns background work via ``asyncio.create_task`` that still
+# holds an aiosqlite connection when the loop closes, the connection's
+# background worker thread never receives its stop sentinel. Because
+# ``aiosqlite`` (0.20 / 0.22) starts these workers as non-daemon threads,
+# they keep the Python interpreter alive after ``pytest`` finishes, so the
+# CI job hangs forever with ``207 passed`` as the last visible output.
+#
+# Marking the workers as daemon threads lets the interpreter exit cleanly
+# when the test session ends. Production code paths always close their
+# connections via ``async with`` / the FastAPI lifespan, so this only
+# affects the test process.
+# ---------------------------------------------------------------------------
+def _force_aiosqlite_daemon_threads() -> None:
+    try:
+        import aiosqlite.core as _aioc
+    except ImportError:  # pragma: no cover - aiosqlite is a hard dep
+        return
+
+    # aiosqlite >= 0.22: Connection composes a Thread via ``aiosqlite.core.Thread``.
+    class _DaemonThread(threading.Thread):
+        def __init__(self, *args, **kwargs):
+            kwargs["daemon"] = True
+            super().__init__(*args, **kwargs)
+
+    if getattr(_aioc, "Thread", None) is threading.Thread:
+        _aioc.Thread = _DaemonThread  # type: ignore[attr-defined]
+
+    # aiosqlite <= 0.20: Connection subclasses Thread directly.
+    if isinstance(_aioc.Connection, type) and issubclass(_aioc.Connection, threading.Thread):
+        _orig_init = _aioc.Connection.__init__
+
+        def _init(self, *args, **kwargs):
+            _orig_init(self, *args, **kwargs)
+            self.daemon = True
+
+        _aioc.Connection.__init__ = _init  # type: ignore[method-assign]
+
+
+_force_aiosqlite_daemon_threads()
 
 
 @pytest.fixture(autouse=True)
