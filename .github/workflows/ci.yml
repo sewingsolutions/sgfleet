@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Backend lint
+        working-directory: backend
+        run: python3 -m ruff check app/ tests/
+
+      - name: Backend format check
+        working-directory: backend
+        run: python3 -m ruff format --check app/ tests/
+
+      - name: Backend tests
+        working-directory: backend
+        run: python3 -m pytest tests/ -v
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Frontend lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Frontend tests
+        working-directory: frontend
+        run: npx vitest run
+
+      - name: Frontend build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Set up Docker Compose
+        run: |
+          DOCKER_COMPOSE_VERSION=$(docker compose version --short)
+          echo "Docker Compose version: $DOCKER_COMPOSE_VERSION"
+
+      - name: Docker Compose config validation
+        run: docker compose config --quiet
+
+      - name: Set up hadolint
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/hadolint/hadolint/master/install.sh | sh
+
+      - name: Lint backend Dockerfile
+        run: hadolint backend/Dockerfile
+
+      - name: Lint frontend Dockerfile
+        run: hadolint frontend/Dockerfile

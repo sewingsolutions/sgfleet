@@ -9,9 +9,11 @@ vi.mock('react-router-dom', () => ({
 }))
 
 const mockCompleteSetup = vi.fn()
+const mockGetSetupStatus = vi.fn()
 
 vi.mock('../src/api/client', () => ({
   api: {
+    getSetupStatus: () => mockGetSetupStatus(),
     completeSetup: (data: object) => mockCompleteSetup(data),
   },
 }))
@@ -20,6 +22,7 @@ describe('SetupWizard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockNavigate.mockClear()
+    mockGetSetupStatus.mockResolvedValue({ setup_complete: false })
     mockCompleteSetup.mockResolvedValue({
       setup_complete: true,
       admin_name: 'Admin',
