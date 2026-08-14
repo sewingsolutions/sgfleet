@@ -1,0 +1,9 @@
+ignored:
+  - DL3008  # Pin versions in apt get install
+  - DL3013  # Pin versions in pip install
+  - DL3003  # Use WORKDIR to switch to a directory
+  - DL3006  # Always tag the version of an image explicitly
+  - DL3015  # Avoid additional packages by specifying --no-install-recommends
+  - DL3059  # Pin versions in npm ci (for Node)
+  - DL4006  # Set the SHELL option -o pipefail
+  - SC2102  # Use -r flag to follow symlinks

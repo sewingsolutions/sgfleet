@@ -819,7 +819,7 @@ def _coerce_value(field: str, value: object) -> object:
                 return int(value) if "." not in value else float(value)
             except ValueError:
                 pass
-        if isinstance(value, (int, float)):
+        if isinstance(value, int | float):
             return int(value) if isinstance(value, float) and value == int(value) else value
     if field in ("environment", "command_flags") and isinstance(value, str):
         try:

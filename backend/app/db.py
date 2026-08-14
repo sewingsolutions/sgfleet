@@ -1061,7 +1061,7 @@ async def get_model_versions_for_field(model_id: str, field: str) -> list[dict]:
         val = v["snapshot"].get(field)
         val_key = (
             json.dumps(val, sort_keys=True)
-            if not isinstance(val, (str, int, bool, type(None)))
+            if not isinstance(val, str | int | bool | type(None))
             else str(val)
             if val is not None
             else "__null__"
