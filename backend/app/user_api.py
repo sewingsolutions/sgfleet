@@ -1,3 +1,4 @@
+import json
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
@@ -6,6 +7,13 @@ from fastapi import APIRouter, Request
 from . import metrics as real_metrics
 from .admin_api import build_opencode_config
 from .auth import _COOKIE_NAME, _USER_COOKIE_NAME
+from .config_templates import (
+    build_claude_code_config,
+    build_cline_config,
+    build_continue_config,
+    build_cursor_checklist,
+    build_interpreter_config,
+)
 from .db import (
     count_user_requests,
     get_active_models,
@@ -266,12 +274,29 @@ async def generate_user_config(request: Request):
         base = row["value"] if row else "http://localhost"
 
     if client_type == "opencode":
-        config = build_opencode_config(raw_key, model_alias, model_name, context_length, max_output_length, base)
-    else:
-        config = {"base_url": base, "api_key": raw_key, "model": model_alias, "client": client_type}
+        config_obj = build_opencode_config(raw_key, model_alias, model_name, context_length, max_output_length, base)
+        config_json = json.dumps(config_obj, indent=2)
+        return {"api_key": raw_key, "config": config_obj, "config_json": config_json}
 
-    return {
-        "api_key": raw_key,
-        "config": config,
-        "config_json": __import__("json").dumps(config, indent=2),
-    }
+    if client_type == "continue":
+        config_json = build_continue_config(raw_key, model_alias, model_name, base, context_length, max_output_length)
+        return {"api_key": raw_key, "config": {}, "config_json": config_json}
+
+    if client_type == "cline":
+        config_json = build_cline_config(raw_key, model_alias, model_name, base, context_length, max_output_length)
+        return {"api_key": raw_key, "config": {}, "config_json": config_json}
+
+    if client_type == "interpreter":
+        config_json = build_interpreter_config(raw_key, model_alias, model_name, base, context_length, max_output_length)
+        return {"api_key": raw_key, "config": {}, "config_json": config_json}
+
+    if client_type == "cursor":
+        checklist = build_cursor_checklist(raw_key, model_alias, model_name, base, context_length, max_output_length)
+        return {"api_key": raw_key, "config": {}, "checklist": checklist}
+
+    if client_type == "claude_code":
+        config_json = build_claude_code_config(raw_key, model_alias, model_name, base, context_length, max_output_length)
+        return {"api_key": raw_key, "config": {}, "config_json": config_json}
+
+    config = {"base_url": base, "api_key": raw_key, "model": model_alias, "client": client_type}
+    return {"api_key": raw_key, "config": config, "config_json": json.dumps(config, indent=2)}

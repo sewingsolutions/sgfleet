@@ -365,9 +365,15 @@ export interface UserQuota {
   total_completion_tokens: number
 }
 
+export interface CursorChecklistItem {
+  step: string
+  value: string
+}
+
 export interface UserConfigResponse {
   api_key: string
   config: Record<string, unknown>
   config_json: string
+  checklist?: CursorChecklistItem[]
   error?: string
 }

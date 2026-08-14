@@ -24,26 +24,34 @@ const apiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> 
 }
 
 const userApiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
-  const res = await fetch(`/api${path}`, {
-    ...options,
-    credentials: 'same-origin',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  })
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 15000)
 
-  if (res.status === 401) {
-    throw new Error('Unauthorized')
+  try {
+    const res = await fetch(`/api${path}`, {
+      ...options,
+      credentials: 'same-origin',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    })
+
+    if (res.status === 401) {
+      throw new Error('Unauthorized')
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Unknown error' }))
+      throw new Error(err.detail || err.error || `HTTP ${res.status}`)
+    }
+
+    if (res.status === 204) return undefined as T
+    return res.json()
+  } finally {
+    clearTimeout(timeoutId)
   }
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: 'Unknown error' }))
-    throw new Error(err.detail || err.error || `HTTP ${res.status}`)
-  }
-
-  if (res.status === 204) return undefined as T
-  return res.json()
 }
 
 export const api = {

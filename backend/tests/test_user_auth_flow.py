@@ -75,10 +75,14 @@ async def test_require_user_valid_cookie():
 
     mock_state = cast(dict, {"user": None})
 
+    class MockState:
+        def __setattr__(self, name: str, value: None | dict = None):
+            mock_state[name] = value
+
     class MockRequest:  # type: ignore
         cookies = {_USER_COOKIE_NAME: token}
         headers = {}
-        state = type("State", (), mock_state)()
+        state = MockState()
         method = "GET"
         url = type("URL", (), {"path": "/test"})()
         client = type("Client", (), {"host": "127.0.0.1"})()
