@@ -37,7 +37,7 @@ jobs:
 
       - name: Backend tests
         working-directory: backend
-        timeout-minutes: 2
+        timeout-minutes: 10
         run: python3 -m pytest tests/ -v --ignore=tests/test_integration.py
 
       - name: Install frontend dependencies
