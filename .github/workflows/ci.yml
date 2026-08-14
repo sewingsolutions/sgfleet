@@ -63,6 +63,10 @@ jobs:
 
       - name: Docker Compose config validation
         run: docker compose config --quiet
+        env:
+          SGFLEET_ENCRYPTION_KEY: dummy
+          MODELS_DIR: /tmp/models
+          LOGS_DIR: /tmp/logs
 
       - name: Set up hadolint
         run: |
