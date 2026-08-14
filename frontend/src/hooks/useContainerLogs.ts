@@ -9,7 +9,7 @@ export interface LogLine {
   level: 'ERROR' | 'WARNING' | 'INFO' | 'DEBUG' | 'TIMESTAMP' | 'NORMAL'
 }
 
-function classifyLine(raw: string): LogLine {
+export function classifyLine(raw: string): LogLine {
   let timestamp: string | null = null
   let content = raw
 

@@ -1,8 +1,11 @@
 import { useMemo, useState } from 'react'
+import { ChevronDown, Check, Pencil, Settings, EyeOff, PlayCircle, RefreshCw, Trash2 } from 'lucide-react'
 import { useUpdateUserMutation, useRotateKeyMutation, useDeleteUserMutation } from '../hooks/useUsers'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
 import ConfigModal from './ConfigModal'
+import { copyToClipboard } from '../utils/copyToClipboard'
+import { tools } from '../config/tools'
 import type { User, Model } from '../api/types'
 
 function fmt(n: number | null | undefined) {
@@ -11,6 +14,39 @@ function fmt(n: number | null | undefined) {
   if (abs >= 1_000_000) return (n / 1_000_000).toFixed(abs % 1_000_000 === 0 ? 0 : 1) + 'M'
   if (abs >= 1_000) return (n / 1_000).toFixed(abs % 1_000 === 0 ? 0 : 1) + 'k'
   return n.toLocaleString()
+}
+
+function ConfigDropdown({ selectedToolId, onSelect }: { selectedToolId: string; onSelect: (toolId: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const selected = tools.find(t => t.id === selectedToolId)
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 px-3 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+      >
+        <Settings className="w-3.5 h-3.5" />
+        {selected?.name || 'Config'}
+        <ChevronDown className="w-3 h-3" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 bottom-full mb-1 z-20 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden">
+            {tools.map(t => (
+              <button
+                key={t.id}
+                onClick={() => { setOpen(false); onSelect(t.id); }}
+                className={`w-full text-left px-3 py-2 text-xs transition hover:bg-gray-100 dark:hover:bg-slate-700 ${t.id === selectedToolId ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300'}`}
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
 }
 
 interface UserCardProps {
@@ -39,6 +75,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
   const [expanded, setExpanded] = useState(false)
   const [showKey, setShowKey] = useState('')
   const [showConfigModal, setShowConfigModal] = useState(false)
+  const [configToolId, setConfigToolId] = useState('opencode')
   const [saving, setSaving] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null)
   const showToast = useToast()
@@ -154,7 +191,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
               className="mt-1 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition "
               style={{ borderColor: checked ? '#6366f1' : '#475569', backgroundColor: checked ? '#6366f1' : 'transparent' }}
             >
-              {checked && <svg className="w-3 h-3 text-gray-900 dark:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+              {checked && <Check className="w-3 h-3 text-gray-900 dark:text-white" />}
             </button>
           )}
           <div>
@@ -165,7 +202,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
                 className="text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition"
                 title="Edit user"
               >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L9.5 21.036H5.464v-3.536L16.732 5.232z" /></svg>
+                <Pencil className="w-3.5 h-3.5" />
               </button>
             </div>
             {user.email && <p className="text-xs text-gray-400 dark:text-gray-500">{user.email}</p>}
@@ -179,10 +216,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
           onClick={() => setExpanded(!expanded)}
           className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition p-1"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
+          <Settings className="w-5 h-5" />
         </button>
       </div>
 
@@ -254,22 +288,19 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
           className="flex items-center gap-1.5 px-3 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
         >
           {user.is_active ? (
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 0A9 9 0 015.636 18.364m0 0L18.364 5.636" /></svg>
+            <EyeOff className="w-3.5 h-3.5" />
           ) : (
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <PlayCircle className="w-3.5 h-3.5" />
           )}
           {user.is_active ? 'Disable' : 'Enable'}
         </button>
         <button onClick={handleRotate}           className="flex items-center gap-1.5 px-3 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+          <RefreshCw className="w-3.5 h-3.5" />
           Rotate Key
         </button>
-        <button onClick={() => setShowConfigModal(true)} className="flex items-center gap-1.5 px-3 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-          Config
-        </button>
+        <ConfigDropdown selectedToolId={configToolId} onSelect={(toolId) => { setConfigToolId(toolId); setShowConfigModal(true); }} />
         <button onClick={handleDelete}           className="flex items-center gap-1.5 px-3 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/50 text-gray-700 dark:text-gray-300 hover:text-red-700 dark:hover:text-red-300">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          <Trash2 className="w-3.5 h-3.5" />
           Delete
         </button>
       </div>
@@ -394,19 +425,8 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
           <div className="bg-white dark:bg-slate-900 border border-indigo-500/30 rounded p-3 flex gap-2 items-center">
             <code className="flex-1 text-sm text-indigo-600 dark:text-indigo-400 font-mono break-all">{showKey}</code>
             <button
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(showKey)
-                } catch {
-                  const ta = document.createElement('textarea')
-                  ta.value = showKey
-                  ta.style.position = 'fixed'
-                  ta.style.opacity = '0'
-                  document.body.appendChild(ta)
-                  ta.select()
-                  document.execCommand('copy')
-                  document.body.removeChild(ta)
-                }
+              onClick={() => {
+                copyToClipboard(showKey)
                 setShowKey('')
                 showToast('Key copied!')
               }}
@@ -419,7 +439,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
       )}
 
       {showConfigModal && (
-        <ConfigModal userId={user.id} userName={user.name} onClose={() => setShowConfigModal(false)} />
+        <ConfigModal userId={user.id} userName={user.name} clientType={configToolId} onClose={() => setShowConfigModal(false)} />
       )}
     </div>
   )

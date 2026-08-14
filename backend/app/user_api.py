@@ -106,7 +106,7 @@ async def get_user_me(request: Request):
         "created_at": user["created_at"],
         "email": user.get("email"),
         "notes": user.get("notes"),
-    }
+    }  # api_key and api_key_hash intentionally excluded
 
 
 @router.get("/user/models")
@@ -287,7 +287,9 @@ async def generate_user_config(request: Request):
         return {"api_key": raw_key, "config": {}, "config_json": config_json}
 
     if client_type == "interpreter":
-        config_json = build_interpreter_config(raw_key, model_alias, model_name, base, context_length, max_output_length)
+        config_json = build_interpreter_config(
+            raw_key, model_alias, model_name, base, context_length, max_output_length
+        )
         return {"api_key": raw_key, "config": {}, "config_json": config_json}
 
     if client_type == "cursor":
@@ -295,7 +297,9 @@ async def generate_user_config(request: Request):
         return {"api_key": raw_key, "config": {}, "checklist": checklist}
 
     if client_type == "claude_code":
-        config_json = build_claude_code_config(raw_key, model_alias, model_name, base, context_length, max_output_length)
+        config_json = build_claude_code_config(
+            raw_key, model_alias, model_name, base, context_length, max_output_length
+        )
         return {"api_key": raw_key, "config": {}, "config_json": config_json}
 
     config = {"base_url": base, "api_key": raw_key, "model": model_alias, "client": client_type}

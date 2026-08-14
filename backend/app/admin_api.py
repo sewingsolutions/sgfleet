@@ -869,6 +869,7 @@ async def clear_pending_restart_endpoint(request: Request, model_id: str):
 class GenerateConfigRequest(BaseModel):
     user_id: int
     rotate: bool = False
+    client: str = "opencode"
 
 
 def build_opencode_config(
@@ -937,13 +938,51 @@ async def generate_user_config(request: Request, user_id: int, body: GenerateCon
     from .hf_downloader import get_sgfleet_base_url
 
     base = await get_sgfleet_base_url()
-    config = build_opencode_config(raw_key, model_alias, model_name, context_length, max_output_length, base)
-    return {
-        "api_key": raw_key,
-        "rotated": body.rotate,
-        "config": config,
-        "config_json": json.dumps(config, indent=2),
-    }
+    client_type = body.client or "opencode"
+
+    from .config_templates import (
+        build_claude_code_config,
+        build_cline_config,
+        build_continue_config,
+        build_cursor_checklist,
+        build_interpreter_config,
+    )
+
+    if client_type == "opencode":
+        config = build_opencode_config(raw_key, model_alias, model_name, context_length, max_output_length, base)
+        return {
+            "api_key": raw_key,
+            "rotated": body.rotate,
+            "config": config,
+            "config_json": json.dumps(config, indent=2),
+        }
+
+    if client_type == "continue":
+        config_json = build_continue_config(raw_key, model_alias, model_name, base, context_length, max_output_length)
+        return {"api_key": raw_key, "rotated": body.rotate, "config": {}, "config_json": config_json}
+
+    if client_type == "cline":
+        config_json = build_cline_config(raw_key, model_alias, model_name, base, context_length, max_output_length)
+        return {"api_key": raw_key, "rotated": body.rotate, "config": {}, "config_json": config_json}
+
+    if client_type == "interpreter":
+        config_json = build_interpreter_config(
+            raw_key, model_alias, model_name, base, context_length, max_output_length
+        )
+        return {"api_key": raw_key, "rotated": body.rotate, "config": {}, "config_json": config_json}
+
+    if client_type == "cursor":
+        checklist = build_cursor_checklist(raw_key, model_alias, model_name, base, context_length, max_output_length)
+        return {"api_key": raw_key, "rotated": body.rotate, "config": {}, "checklist": checklist}
+
+    if client_type == "claude_code":
+        config_json = build_claude_code_config(
+            raw_key, model_alias, model_name, base, context_length, max_output_length
+        )
+        return {"api_key": raw_key, "rotated": body.rotate, "config": {}, "config_json": config_json}
+
+    config = {"base_url": base, "api_key": raw_key, "model": model_alias, "client": client_type}
+    return {"api_key": raw_key, "rotated": body.rotate, "config": config, "config_json": json.dumps(config, indent=2)}
 
 
 # --- System Endpoints ---

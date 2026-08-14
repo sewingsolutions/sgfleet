@@ -1,4 +1,5 @@
 import json
+import shlex
 
 
 def build_continue_config(api_key, model_alias, model_name, base_url, context_length, max_output_length):
@@ -20,14 +21,17 @@ def build_continue_config(api_key, model_alias, model_name, base_url, context_le
 
 
 def build_cline_config(api_key, model_alias, model_name, base_url, context_length, max_output_length):
-    return json.dumps({
-        "cline.apiProvider": "openai",
-        "cline.openaiApiBase": f"{base_url}/v1",
-        "cline.openaiApiKey": api_key,
-        "cline.openaiModel": model_alias,
-        "cline.openaiStreamingSource": "openai-node",
-        "cline.requestDelay": 1,
-    }, indent=2)
+    return json.dumps(
+        {
+            "cline.apiProvider": "openai",
+            "cline.openaiApiBase": f"{base_url}/v1",
+            "cline.openaiApiKey": api_key,
+            "cline.openaiModel": model_alias,
+            "cline.openaiStreamingSource": "openai-node",
+            "cline.requestDelay": 1,
+        },
+        indent=2,
+    )
 
 
 def build_interpreter_config(api_key, model_alias, model_name, base_url, context_length, max_output_length):
@@ -70,8 +74,8 @@ def build_cursor_checklist(api_key, model_alias, model_name, base_url, context_l
 
 
 def build_claude_code_config(api_key, model_alias, model_name, base_url, context_length, max_output_length):
-    config = f"""export ANTHROPIC_API_KEY="{api_key}"
-export ANTHROPIC_BASE_URL="{base_url}/v1"
+    config = f"""export ANTHROPIC_API_KEY={shlex.quote(api_key)}
+export ANTHROPIC_BASE_URL={shlex.quote(f"{base_url}/v1")}
 # Model: {model_alias}
-npx @anthropic-ai/claude-code@latest --model {model_alias}"""
+npx @anthropic-ai/claude-code@latest --model {shlex.quote(model_alias)}"""
     return config

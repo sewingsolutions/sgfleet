@@ -113,8 +113,8 @@ export const api = {
       ? apiFetch<ModelConfig>(`/api/model/config?model_id=${modelId}`)
       : apiFetch<ModelConfig>('/api/model/config'),
   getModels: () => apiFetch<SglModel[]>('/api/models'),
-  generateConfig: (userId: number, rotate: boolean = false) =>
-    apiFetch<GeneratedConfig>(`/api/users/${userId}/config`, { method: 'POST', body: JSON.stringify({ user_id: userId, rotate }) }),
+  generateConfig: (userId: number, rotate: boolean = false, client: string = 'opencode') =>
+    apiFetch<GeneratedConfig>(`/api/users/${userId}/config`, { method: 'POST', body: JSON.stringify({ user_id: userId, rotate, client }) }),
 
   // Model CRUD
   listModels: () => apiFetch<Model[]>('/api/models'),

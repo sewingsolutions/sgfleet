@@ -233,6 +233,7 @@ async def migrate_to_v5(db):
         with contextlib.suppress(Exception):
             await db.execute(f"ALTER TABLE users ADD COLUMN {col} {dtype}")
     await db.execute("UPDATE config SET value = ? WHERE key = ?", ("5", "migration_version"))
+    await db.commit()
 
 
 async def migrate_to_v6(db):

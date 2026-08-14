@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../api/client'
+import { copyToClipboard } from '../utils/copyToClipboard'
+import { useSetupStatus, useCompleteSetupMutation } from '../hooks/useSetup'
 
 const steps = ['Welcome', 'Admin Name', 'Base URL', 'HF Token', 'Complete']
 
@@ -10,28 +11,19 @@ export default function SetupWizard() {
   const [adminName, setAdminName] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [hfToken, setHfToken] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
   const [resultKey, setResultKey] = useState('')
   const [keyCopied, setKeyCopied] = useState(false)
+  const [error, setError] = useState('')
 
-  // If setup is already complete (e.g. user navigated here after finishing the
-  // wizard in another tab, or a stale AuthContext bounced them here), send
-  // them straight to the login page instead of showing the wizard.
+  const { data: setupStatus } = useSetupStatus()
+  const completeMutation = useCompleteSetupMutation()
+
+  // If setup is already complete, redirect to login.
   useEffect(() => {
-    let cancelled = false
-    api.getSetupStatus()
-      .then((res) => {
-        if (!cancelled && res.setup_complete && !resultKey) {
-          navigate('/login', { replace: true })
-        }
-      })
-      .catch(() => { /* ignore — show wizard */ })
-    return () => { cancelled = true }
-    // Intentionally only run on mount; we don't want to redirect right after
-    // completing setup (resultKey guards that case).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (setupStatus?.setup_complete && !resultKey) {
+      navigate('/login', { replace: true })
+    }
+  }, [setupStatus, resultKey, navigate])
 
   const canNext = useCallback(() => {
     if (step === 1) return adminName.trim().length > 0
@@ -47,10 +39,9 @@ export default function SetupWizard() {
   }
 
   const handleComplete = async () => {
-    setLoading(true)
     setError('')
     try {
-      const result = await api.completeSetup({
+      const result = await completeMutation.mutateAsync({
         admin_name: adminName.trim(),
         base_url: baseUrl.trim(),
         hf_token: hfToken.trim() || undefined,
@@ -59,8 +50,6 @@ export default function SetupWizard() {
       setStep(4)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Setup failed')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -68,14 +57,10 @@ export default function SetupWizard() {
     navigate('/login', { replace: true })
   }
 
-  const copyKey = async () => {
-    try {
-      await navigator.clipboard.writeText(resultKey)
-      setKeyCopied(true)
-      setTimeout(() => setKeyCopied(false), 2000)
-    } catch {
-      /* clipboard unavailable */
-    }
+  const copyKey = () => {
+    copyToClipboard(resultKey)
+    setKeyCopied(true)
+    setTimeout(() => setKeyCopied(false), 2000)
   }
 
   return (
@@ -267,10 +252,10 @@ export default function SetupWizard() {
                 </button>
                 <button
                   onClick={handleComplete}
-                  disabled={loading}
+                  disabled={completeMutation.isPending}
                   className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded text-white font-medium transition text-sm disabled:opacity-50"
                 >
-                  {loading ? 'Setting up...' : 'Complete Setup'}
+                  {completeMutation.isPending ? 'Setting up...' : 'Complete Setup'}
                 </button>
               </div>
             </div>

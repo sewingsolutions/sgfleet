@@ -107,5 +107,7 @@ async def logout(request: Request):
 
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie(key=_COOKIE_NAME, path="/")
+    response.delete_cookie(key=_COOKIE_NAME, path="/admin")
     response.delete_cookie(key=_USER_COOKIE_NAME, path="/")
+    response.delete_cookie(key=_USER_COOKIE_NAME, path="/admin")
     return response

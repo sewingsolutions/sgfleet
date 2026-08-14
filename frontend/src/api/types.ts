@@ -78,7 +78,8 @@ export interface GeneratedConfig {
   api_key: string
   rotated: boolean
   config: Record<string, unknown>
-  config_json: string
+  config_json?: string
+  checklist?: CursorChecklistItem[]
 }
 
 export interface AuditEntry {

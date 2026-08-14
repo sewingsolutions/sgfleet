@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from '../api/client'
 import { useToast } from '../hooks/useToast'
+import { copyToClipboard } from '../utils/copyToClipboard'
 
 interface AddUserFormProps {
   onCreated: () => void
@@ -46,19 +47,8 @@ export default function AddUserForm({ onCreated }: AddUserFormProps) {
           <div className="flex gap-2 items-center">
             <code className="flex-1 bg-gray-50 dark:bg-slate-900 px-3 py-2 rounded text-sm text-indigo-600 dark:text-indigo-300 font-mono">{showKey}</code>
             <button
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(showKey)
-                } catch {
-                  const ta = document.createElement('textarea')
-                  ta.value = showKey
-                  ta.style.position = 'fixed'
-                  ta.style.opacity = '0'
-                  document.body.appendChild(ta)
-                  ta.select()
-                  document.execCommand('copy')
-                  document.body.removeChild(ta)
-                }
+              onClick={() => {
+                copyToClipboard(showKey)
                 setShowKey('')
                 showToast('Key copied!')
               }}
