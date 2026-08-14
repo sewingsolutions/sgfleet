@@ -3,6 +3,7 @@ uvicorn[standard]==0.32.0
 httpx==0.27.2
 aiosqlite==0.20.0
 bcrypt==4.2.1
+cryptography==44.0.0
 python-multipart==0.0.12
 pydantic-settings==2.6.1
 prometheus-client==0.21.1

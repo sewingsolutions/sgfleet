@@ -32,8 +32,18 @@ async def lifespan(app: FastAPI):
     global _metrics_cleanup_task, _audit_cleanup_task
     await init_db()
 
-    # Start model sync in background
-    asyncio.create_task(_start_model_sync())
+    from .db import is_setup_complete, load_admin_api_key
+
+    setup_done = await is_setup_complete()
+
+    if setup_done:
+        from .config import settings
+
+        admin_key = await load_admin_api_key()
+        settings.admin_api_key = admin_key
+        asyncio.create_task(_start_model_sync())
+    else:
+        logger.info("Setup not complete — skipping model sync. Complete setup at /admin/setup")
 
     # Restore persisted log level
     from .logging import set_logger_level

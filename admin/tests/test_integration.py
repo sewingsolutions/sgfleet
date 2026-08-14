@@ -16,8 +16,20 @@ from app.gateway import _rate_buckets
 from fastapi.testclient import TestClient
 
 
+# Mark setup complete globally so the lifespan and all endpoints see it
+async def _mock_is_setup_complete():
+    return True
+
+
+@pytest.fixture(scope="module", autouse=True)
+def mock_setup_complete():
+    """Mock is_setup_complete for the entire integration test module."""
+    with patch("app.db.is_setup_complete", _mock_is_setup_complete):
+        yield
+
+
 @pytest.fixture(scope="module")
-def client():
+def client(mock_setup_complete):
     """Create a TestClient with a fresh database."""
     import tempfile
 

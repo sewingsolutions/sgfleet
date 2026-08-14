@@ -21,7 +21,7 @@ describe('ProtectedRoute', () => {
   })
 
   test('unauthenticated user gets redirected to /login', async () => {
-    mockUseAuth.mockReturnValue({ loading: false, authenticated: false })
+    mockUseAuth.mockReturnValue({ loading: false, authenticated: false, setupComplete: true })
 
     const ProtectedRoute = (await import('../src/components/ProtectedRoute')).default
 
@@ -36,7 +36,7 @@ describe('ProtectedRoute', () => {
   })
 
   test('authenticated user sees children', async () => {
-    mockUseAuth.mockReturnValue({ loading: false, authenticated: true })
+    mockUseAuth.mockReturnValue({ loading: false, authenticated: true, setupComplete: true })
 
     const ProtectedRoute = (await import('../src/components/ProtectedRoute')).default
 
@@ -50,7 +50,7 @@ describe('ProtectedRoute', () => {
   })
 
   test('loading state shows loading message', async () => {
-    mockUseAuth.mockReturnValue({ loading: true, authenticated: false })
+    mockUseAuth.mockReturnValue({ loading: true, authenticated: false, setupComplete: true })
 
     const ProtectedRoute = (await import('../src/components/ProtectedRoute')).default
 
@@ -63,5 +63,20 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText('Loading...')).toBeInTheDocument()
     expect(screen.queryByTestId('children')).not.toBeInTheDocument()
     expect(screen.queryByTestId('navigate-to')).not.toBeInTheDocument()
+  })
+
+  test('incomplete setup redirects to /setup', async () => {
+    mockUseAuth.mockReturnValue({ loading: false, authenticated: false, setupComplete: false })
+
+    const ProtectedRoute = (await import('../src/components/ProtectedRoute')).default
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ProtectedRoute><span data-testid="children">Protected content</span></ProtectedRoute>
+      </QueryClientProvider>
+    )
+
+    expect(screen.getByTestId('navigate-to')).toHaveTextContent('/setup')
+    expect(screen.queryByTestId('children')).not.toBeInTheDocument()
   })
 })

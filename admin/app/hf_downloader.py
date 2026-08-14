@@ -497,14 +497,23 @@ def generate_model_config(hf_model: dict, target_dir: str, gpu_indices: list[int
 async def get_hf_token() -> str:
     from .db import get_db
 
-    token = os.environ.get("HUGGINGFACE_TOKEN", "")
-    if token:
-        return token
     try:
-        async with get_db() as db, db.execute("SELECT value FROM config WHERE key = 'hf_api_token'") as cursor:
-            row = await cursor.fetchone()
-            if row:
-                return row[0]
+        async with get_db() as db:
+            # Try encrypted token first
+            async with db.execute("SELECT value FROM config WHERE key = 'hf_api_token_enc'") as cursor:
+                row = await cursor.fetchone()
+                if row:
+                    try:
+                        from .crypto import decrypt
+
+                        return decrypt(row["value"])
+                    except Exception:
+                        pass
+            # Fallback to plaintext (legacy)
+            async with db.execute("SELECT value FROM config WHERE key = 'hf_api_token'") as cursor:
+                row = await cursor.fetchone()
+                if row:
+                    return row[0]
     except Exception:
         pass
     return ""
@@ -513,8 +522,21 @@ async def get_hf_token() -> str:
 async def set_hf_token(token: str) -> None:
     from .db import get_db
 
+    if not token:
+        async with get_db() as db:
+            await db.execute("DELETE FROM config WHERE key IN ('hf_api_token', 'hf_api_token_enc')")
+            await db.commit()
+        return
+
+    from .crypto import encrypt
+
+    encrypted = encrypt(token)
     async with get_db() as db:
-        await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("hf_api_token", token))
+        await db.execute(
+            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("hf_api_token_enc", encrypted)
+        )
+        # Clean up plaintext copy if it exists
+        await db.execute("DELETE FROM config WHERE key = 'hf_api_token'")
         await db.commit()
 
 

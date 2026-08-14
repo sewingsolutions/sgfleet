@@ -15,8 +15,61 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-# ── Key order ────────────────────────────────────────────────────────
-KEY_NAMES=(ADMIN_API_KEY SGFLEET_BASE_URL MODELS_DIR HOST_MODELS_DIR HUGGINGFACE_TOKEN PROMETHEUS_HOST)
+# ── Host requirement checks ─────────────────────────────────────────
+check_host_requirements() {
+  echo -e "${BOLD}Checking host requirements...${NC}"
+  local failed=0
+
+  # Docker
+  if ! command -v docker &>/dev/null; then
+    echo -e "${RED}  ✗ docker not found${NC}"
+    failed=1
+  else
+    echo -e "  ${GREEN}✓ docker${NC}"
+  fi
+
+  # Docker Compose
+  if ! docker compose version &>/dev/null; then
+    echo -e "${RED}  ✗ docker compose not found${NC}"
+    failed=1
+  else
+    echo -e "  ${GREEN}✓ docker compose${NC}"
+  fi
+
+  # nvidia-smi
+  if ! command -v nvidia-smi &>/dev/null; then
+    echo -e "${YELLOW}  ⚠ nvidia-smi not found — GPU access will not be available${NC}"
+  else
+    if ! nvidia-smi &>/dev/null; then
+      echo -e "${RED}  ✗ nvidia-smi failed — GPU drivers may not be installed${NC}"
+      failed=1
+    else
+      echo -e "  ${GREEN}✓ nvidia-smi${NC}"
+    fi
+  fi
+
+  # nvidia-ctk (NVIDIA Container Toolkit)
+  if ! command -v nvidia-ctk &>/dev/null; then
+    echo -e "${YELLOW}  ⚠ nvidia-ctk not found — NVIDIA Container Toolkit may not be installed${NC}"
+    echo -e "     Docker containers may not be able to access GPUs."
+    echo -e "     Install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html"
+  else
+    echo -e "  ${GREEN}✓ nvidia-ctk${NC}"
+  fi
+
+  # openssl
+  if ! command -v openssl &>/dev/null; then
+    echo -e "${RED}  ✗ openssl not found — required for encryption key generation${NC}"
+    failed=1
+  else
+    echo -e "  ${GREEN}✓ openssl${NC}"
+  fi
+
+  if [[ $failed -eq 1 ]]; then
+    echo -e "\n${RED}${BOLD}Host requirements not met. Please fix the issues above and try again.${NC}"
+    exit 1
+  fi
+}
 
 # ── Load existing .env into associative array ────────────────────────
 declare -A existing_values
@@ -49,11 +102,6 @@ load_existing() {
   done < .env
 }
 
-# ── Auto-generate admin key ──────────────────────────────────────────
-generate_key() {
-  printf 'sk-%s' "$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 40)"
-}
-
 # ── Escape a value for safe .env double-quoting ──────────────────────
 env_escape() {
   local v="$1"
@@ -62,28 +110,22 @@ env_escape() {
   printf '%s' "$v"
 }
 
-# ── Prompt for a single key ──────────────────────────────────────────
+# ── Prompt for infrastructure values ─────────────────────────────────
 declare -A result
 
-prompt_key() {
+prompt_infra() {
   local name="$1"
   local desc default
 
   case "$name" in
-    ADMIN_API_KEY)     desc="Admin API key (dashboard login)";;
-    SGFLEET_BASE_URL)  desc="External gateway URL (used in generated configs)";;
-    MODELS_DIR)        desc="Host directory for model files";;
-    HOST_MODELS_DIR)   desc="Host path used for spawned model container binds (leave empty to reuse MODELS_DIR)";;
-    HUGGINGFACE_TOKEN) desc="HuggingFace API token (gated models)";;
-    PROMETHEUS_HOST)   desc="Prometheus host (leave empty to disable metrics)";;
+    MODELS_DIR)       desc="Host directory for model files"; default="/models";;
+    DATA_DIR)         desc="Host directory for data files"; default="./data";;
+    LOGS_DIR)         desc="Host directory for log files"; default="./logs";;
+    SGFLEET_BASE_URL) desc="External gateway URL (CORS, callbacks)"; default="https://your-gateway-domain.example.com/v1";;
+    PROMETHEUS_HOST)  desc="Prometheus host (omit to disable metrics)"; default="";;
   esac
 
-  case "$name" in
-    MODELS_DIR)        default="/models";;
-    SGFLEET_BASE_URL)  default="https://your-gateway-domain.example.com/v1";;
-    *)                 default="";;
-  esac
-
+  # Check for existing value
   if [[ "${has_key[$name]:-}" == "1" ]]; then
     local cur="${existing_values[$name]:-}"
     printf "\n${BOLD}%-26s${NC} (current: ${YELLOW}%s${NC})\n" "$desc" "$cur"
@@ -100,33 +142,23 @@ prompt_key() {
   fi
 
   echo ""
-
-  if [[ "$name" == "ADMIN_API_KEY" ]]; then
-    read -rp "  Auto-generate? [Y/n] " c
-    c="${c^^}"
-    if [[ "$c" == "Y" || -z "$c" ]]; then
-      result["$name"]="$(generate_key)"
-      return 0
-    fi
-    read -rp "  Enter key: " val
-    result["$name"]="$val"
-  elif [[ -n "$default" ]]; then
-    read -rp "  $desc [$default]: " val
-    result["$name"]="${val:-$default}"
-  else
-    read -rp "  $desc: " val
-    result["$name"]="$val"
-  fi
+  read -rp "  $desc [$default]: " val
+  result["$name"]="${val:-$default}"
 }
 
-# ── Warn about dead keys ─────────────────────────────────────────────
-warn_dead_keys() {
-  local dk
-  for dk in "SGFLEET_API_KEY" "MODEL_PROFILE"; do
-    if [[ "${has_key[$dk]:-}" == "1" ]]; then
-      echo -e "${YELLOW}⚠  Removing dead key: $dk (no longer used)${NC}"
-    fi
-  done
+# ── Detect machine IP ────────────────────────────────────────────────
+detect_ip() {
+  local ip=""
+  if command -v hostname &>/dev/null; then
+    ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  fi
+  if [[ -z "$ip" ]] && command -v ip &>/dev/null; then
+    ip="$(ip route get 1 2>/dev/null | awk '{print $NF; exit}' || true)"
+  fi
+  if [[ -z "$ip" ]]; then
+    ip="localhost"
+  fi
+  echo "$ip"
 }
 
 # ── Main ─────────────────────────────────────────────────────────────
@@ -134,44 +166,67 @@ echo -e "${BOLD}${BLUE}┌──────────────────
 echo -e "${BOLD}${BLUE}│           SGFleet Initial Setup                │${NC}"
 echo -e "${BOLD}${BLUE}└────────────────────────────────────────────────┘${NC}"
 
-load_existing
+# Step 1: Host checks
+check_host_requirements
 
+# Step 2: Load existing .env
+load_existing
 if [[ ${#has_key[@]} -gt 0 ]]; then
-  ts="$(date +%Y%m%d%H%M%S)"
-  cp .env ".env.backup.$ts"
-  echo -e "\n${YELLOW}Existing .env detected - backed up to .env.backup.$ts${NC}"
-  echo "For each key you can Keep, Update, or Remove the current value."
-else
-  echo -e "\n${GREEN}No .env found - collecting configuration values.${NC}"
+  echo -e "\n${YELLOW}Existing .env detected — you can keep, update, or remove values.${NC}"
 fi
 
-warn_dead_keys
+# Step 3: Prompt for infrastructure values
+echo ""
+echo -e "${BOLD}Infrastructure configuration:${NC}"
+prompt_infra "MODELS_DIR"
+prompt_infra "DATA_DIR"
+prompt_infra "LOGS_DIR"
+prompt_infra "SGFLEET_BASE_URL"
+prompt_infra "PROMETHEUS_HOST"
 
-for k in "${KEY_NAMES[@]}"; do
-  prompt_key "$k"
-done
+# Step 4: Auto-generate values
+echo -e "\n${BOLD}Generating secure values...${NC}"
+SGFLEET_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+echo -e "  ${GREEN}✓ Encryption key generated${NC}"
 
-# ── Write .env ───────────────────────────────────────────────────────
+# HOST_MODELS_DIR defaults to MODELS_DIR
+HOST_MODELS_DIR="${result[MODELS_DIR]:-/models}"
+
+# Step 5: Create host directories
+echo -e "\n${BOLD}Creating host directories...${NC}"
+models_dir="${result[MODELS_DIR]:-/models}"
+data_dir="${result[DATA_DIR]:-./data}"
+logs_dir="${result[LOGS_DIR]:-./logs}"
+
+mkdir -p "$models_dir" && echo -e "  ${GREEN}✓ $models_dir${NC}"
+mkdir -p "$data_dir" && echo -e "  ${GREEN}✓ $data_dir${NC}"
+mkdir -p "$logs_dir" && echo -e "  ${GREEN}✓ $logs_dir${NC}"
+
+# Step 6: Write .env
 echo -e "\n${BOLD}Writing .env ...${NC}"
-
-esc_admin="$(env_escape "${result[ADMIN_API_KEY]:-}")"
 esc_base="$(env_escape "${result[SGFLEET_BASE_URL]:-}")"
-esc_models="$(env_escape "${result[MODELS_DIR]:-}")"
-esc_hf="$(env_escape "${result[HUGGINGFACE_TOKEN]:-}")"
+esc_models="$(env_escape "$models_dir")"
+esc_host_models="$(env_escape "$HOST_MODELS_DIR")"
+esc_data="$(env_escape "$data_dir")"
+esc_logs="$(env_escape "$logs_dir")"
+esc_enc="$(env_escape "$SGFLEET_ENCRYPTION_KEY")"
 esc_prom="$(env_escape "${result[PROMETHEUS_HOST]:-}")"
 
 {
-  echo "# SGFleet configuration"
+  echo "# SGFleet configuration — infrastructure only"
+  echo "# Secrets are managed via the web UI after first boot"
   echo ""
-  echo "# Admin"
-  echo "ADMIN_API_KEY=\"${esc_admin}\""
+  echo "# Host directories"
+  echo "MODELS_DIR=\"${esc_models}\""
+  echo "HOST_MODELS_DIR=\"${esc_host_models}\""
+  echo "DATA_DIR=\"${esc_data}\""
+  echo "LOGS_DIR=\"${esc_logs}\""
   echo ""
-  echo "# Gateway"
+  echo "# Network"
   echo "SGFLEET_BASE_URL=\"${esc_base}\""
   echo ""
-  echo "# Models"
-  echo "MODELS_DIR=\"${esc_models}\""
-  echo "HUGGINGFACE_TOKEN=\"${esc_hf}\""
+  echo "# Encryption"
+  echo "SGFLEET_ENCRYPTION_KEY=\"${esc_enc}\""
   echo ""
   echo "# Monitoring"
   if [[ -n "${result[PROMETHEUS_HOST]:-}" ]]; then
@@ -181,9 +236,7 @@ esc_prom="$(env_escape "${result[PROMETHEUS_HOST]:-}")"
   fi
 } > .env
 
-# ── Generate models.json ──────────────────────────────────────────────
-models_dir="${result[MODELS_DIR]:-/models}"
-
+# Step 7: Generate models.json
 if [[ ! -f models.json && -d "$models_dir" ]]; then
   echo -e "\n${BOLD}${BLUE}Scanning for models in ${models_dir} ...${NC}"
 
@@ -281,38 +334,35 @@ EOF
   fi
 elif [[ -f models.json ]]; then
   echo -e "\n${YELLOW}models.json already exists — skipping.${NC}"
-  echo "  To regenerate, remove models.json and run init.sh again.${NC}"
 fi
 
-# ── Summary ─────────────────────────────────────────────────────────
+# Step 8: Launch Docker Compose
+echo -e "\n${BOLD}Launching Docker Compose...${NC}"
+if [[ -n "${result[PROMETHEUS_HOST]:-}" ]]; then
+  docker compose --profile monitoring up -d
+  echo -e "  ${GREEN}✓ Started with metrics export${NC}"
+else
+  docker compose up -d
+  echo -e "  ${GREEN}✓ Started (metrics export disabled)${NC}"
+fi
+
+# Step 9: Print summary with IP
+setup_ip="$(detect_ip)"
+
+echo -e "\n${GREEN}${BOLD}╔══════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}${BOLD}║  Setup complete! First-boot wizard ready.    ║${NC}"
+echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${GREEN}${BOLD}Setup complete.${NC}"
+echo -e "${BOLD}Complete setup in your browser:${NC}"
+echo -e "  ${BLUE}http://${setup_ip}:8000${NC}"
 echo ""
 echo -e "${BOLD}Configuration:${NC}"
 echo -e "  SGFLEET_BASE_URL  ${BOLD}${result[SGFLEET_BASE_URL]:-<empty>}${NC}"
-echo -e "  MODELS_DIR        ${BOLD}${result[MODELS_DIR]:-<empty>}${NC}"
-
-if [[ -n "${result[HUGGINGFACE_TOKEN]:-}" ]]; then
-  hf_short="${result[HUGGINGFACE_TOKEN]:0:8}"
-  echo -e "  HUGGINGFACE_TOKEN ${BOLD}${hf_short}***${NC}"
-else
-  echo -e "  HUGGINGFACE_TOKEN ${BOLD}<not set>${NC}"
-fi
-
+echo -e "  MODELS_DIR        ${BOLD}${models_dir}${NC}"
+echo -e "  DATA_DIR          ${BOLD}${data_dir}${NC}"
+echo -e "  LOGS_DIR          ${BOLD}${logs_dir}${NC}"
 if [[ -n "${result[PROMETHEUS_HOST]:-}" ]]; then
   echo -e "  PROMETHEUS_HOST   ${BOLD}${result[PROMETHEUS_HOST]}${NC}"
 else
   echo -e "  PROMETHEUS_HOST   ${BOLD}<disabled>${NC}"
 fi
-
-echo ""
-if [[ -n "${result[ADMIN_API_KEY]:-}" ]]; then
-  echo -e "${RED}${BOLD}Save this ADMIN_API_KEY - it will not be shown again:${NC}"
-  echo ""
-  echo -e "   ${GREEN}${BOLD}${result[ADMIN_API_KEY]}${NC}"
-  echo ""
-fi
-
-echo -e "${BOLD}Next steps:${NC}"
-echo "  1. docker compose up -d"
-echo "  2. Open http://<server>:8000/admin/login"

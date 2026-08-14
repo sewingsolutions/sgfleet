@@ -5,6 +5,7 @@ import tempfile
 import pytest
 
 os.environ.setdefault("ADMIN_API_KEY", "test-secret-key-for-testing")
+os.environ.setdefault("SGFLEET_ENCRYPTION_KEY", "0" * 64)
 
 
 @pytest.fixture(autouse=True)
@@ -28,6 +29,19 @@ def clear_token_cache():
     app.db._token_cache.clear()
     yield
     app.db._token_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def clear_crypto_key():
+    """Reset the cached Fernet key before each test."""
+    import sys
+    import app.crypto
+
+    app.crypto._key = None  # type: ignore[attr-defined]
+    yield
+    app.crypto._key = None  # type: ignore[attr-defined]
+    if "app.crypto" in sys.modules:
+        sys.modules["app.crypto"]._key = None  # type: ignore[attr-defined]
 
 
 async def init_test_db():

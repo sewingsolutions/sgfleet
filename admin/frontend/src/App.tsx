@@ -4,6 +4,7 @@ import ToastProvider from './components/Toast'
 import ConfirmProvider from './components/ConfirmProvider'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
+import SetupWizard from './pages/SetupWizard'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import UsersPage from './pages/UsersPage'
@@ -25,6 +26,7 @@ function App() {
         <ToastProvider>
           <ConfirmProvider>
             <Routes>
+            <Route path="/setup" element={<SetupWizard />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<ProtectedRoute><Layout><DashboardPage /></Layout></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><Layout><UsersPage /></Layout></ProtectedRoute>} />

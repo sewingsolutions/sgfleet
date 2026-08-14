@@ -9,7 +9,7 @@ from datetime import UTC
 import aiosqlite
 import bcrypt as bcrypt_lib
 
-from .config import settings
+from .config import generate_key, settings
 
 logger = logging.getLogger("sgfleet-admin")
 _MAX_VERSIONS = 10
@@ -170,6 +170,7 @@ async def init_db():
             (11, migrate_to_v11),
             (12, migrate_to_v12),
             (13, migrate_to_v13),
+            (14, migrate_to_v14),
         ]
         for target, fn in migrations:
             if current < target:
@@ -327,11 +328,12 @@ async def migrate_to_v10(db):
 
 
 async def seed_users(db):
-    """Seed admin key hash and migration version on first run."""
-    from .config import settings
+    """Seed migration version on first run.
 
-    admin_raw = bcrypt_lib.hashpw(settings.admin_api_key.encode("utf-8"), bcrypt_lib.gensalt())
-    await db.execute("INSERT INTO config (key, value) VALUES (?, ?)", ("admin_api_key_hash", admin_raw.decode("utf-8")))
+    Admin key hash is no longer seeded here — it is set by the setup wizard
+    via `set_admin_credentials`. The `_sync_admin_api_key_hash` call in
+    `init_db` handles legacy deployments that still use ADMIN_API_KEY env var.
+    """
     await db.execute("INSERT INTO config (key, value) VALUES (?, ?)", ("migration_version", "1"))
     await db.commit()
 
@@ -360,7 +362,7 @@ async def bootstrap_users_from_json():
         if existing:
             continue
 
-        raw_key = item.get("api_key") or settings.generate_key()
+        raw_key = item.get("api_key") or generate_key()
         await create_user(
             name=name,
             raw_key=raw_key,
@@ -379,12 +381,16 @@ async def bootstrap_users_from_json():
 async def _sync_admin_api_key_hash(db):
     """Ensure ``admin_api_key_hash`` in ``config`` verifies against the env var.
 
-    If a row is missing (older schemas) or bcrypt says the current
-    ``settings.admin_api_key`` does not match the stored hash, re-hash and
-    write the current env value. This keeps the admin key aligned with the
-    deployment configuration even across volume renames or env changes.
+    Only runs when setup wizard has NOT been completed (legacy mode).
+    After setup, the admin key is managed via encrypted DB storage and this
+    function is a no-op to prevent overwriting the stored hash with bcrypt("").
     """
     from .config import settings as cfg
+
+    async with db.execute("SELECT value FROM config WHERE key = ?", ("setup_complete",)) as cursor:
+        row = await cursor.fetchone()
+    if row and row[0] == "true":
+        return
 
     async with db.execute("SELECT value FROM config WHERE key = ?", ("admin_api_key_hash",)) as cursor:
         row = await cursor.fetchone()
@@ -481,6 +487,16 @@ async def migrate_to_v13(db):
     with contextlib.suppress(Exception):
         await db.execute("ALTER TABLE models ADD COLUMN pending_restart INTEGER DEFAULT 0")
     await db.execute("UPDATE config SET value = ? WHERE key = ?", ("13", "migration_version"))
+    await db.commit()
+
+
+async def migrate_to_v14(db):
+    """Add setup_complete flag. No schema changes — uses existing config table."""
+    async with db.execute("SELECT key FROM config WHERE key IN ('admin_api_key', 'admin_api_key_hash', 'admin_api_key_enc')") as cursor:
+        row = await cursor.fetchone()
+    if row:
+        await db.execute("INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)", ("setup_complete", "true"))
+    await db.execute("UPDATE config SET value = ? WHERE key = ?", ("14", "migration_version"))
     await db.commit()
 
 
@@ -1393,3 +1409,70 @@ async def get_user_summary(user_id: int) -> dict:
             "completion_tokens": all_time[3] if all_time else 0,
             "total_tokens": all_time[4] if all_time else 0,
         }
+
+
+# ── Setup state helpers ──────────────────────────────────────────────
+
+
+async def is_setup_complete() -> bool:
+    """Check if the first-boot wizard has been completed."""
+    async with get_db() as db, db.execute("SELECT value FROM config WHERE key = ?", ("setup_complete",)) as cursor:
+        row = await cursor.fetchone()
+        if row is None:
+            return False
+        return row["value"] == "true"
+
+
+async def mark_setup_complete() -> None:
+    """Mark setup as complete."""
+    async with get_db() as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("setup_complete", "true")
+        )
+        await db.commit()
+
+
+async def set_admin_credentials(admin_name: str, raw_key: str) -> None:
+    """Store admin name and key (hashed + encrypted) and mark setup complete.
+
+    Uses a single DB connection to avoid nested get_db() calls that could
+    lead to inconsistent state if the outer commit fails.
+    """
+    from .crypto import encrypt
+
+    hashed = bcrypt_lib.hashpw(raw_key.encode("utf-8"), bcrypt_lib.gensalt()).decode("utf-8")
+    encrypted = encrypt(raw_key)
+    async with get_db() as db:
+        await db.execute(
+            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_name", admin_name)
+        )
+        await db.execute(
+            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_hash", hashed)
+        )
+        await db.execute(
+            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_enc", encrypted)
+        )
+        await db.execute(
+            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("setup_complete", "true")
+        )
+        await db.commit()
+
+
+async def get_admin_name() -> str:
+    """Get the admin display name."""
+    async with get_db() as db, db.execute("SELECT value FROM config WHERE key = ?", ("admin_name",)) as cursor:
+        row = await cursor.fetchone()
+        if row is None:
+            return "admin"
+        return row["value"]
+
+
+async def load_admin_api_key() -> str:
+    """Decrypt and return the raw admin API key from the database."""
+    from .crypto import decrypt
+
+    async with get_db() as db, db.execute("SELECT value FROM config WHERE key = ?", ("admin_api_key_enc",)) as cursor:
+        row = await cursor.fetchone()
+        if row is None:
+            return ""
+        return decrypt(row["value"])

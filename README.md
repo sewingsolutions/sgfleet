@@ -1,6 +1,7 @@
 # SGFleet
 
 Self-hosted LLM inference gateway with multi-model management, auth, rate limiting, and monitoring.
+Currently supports Nvidia GPU's.
 
 ## Services
 

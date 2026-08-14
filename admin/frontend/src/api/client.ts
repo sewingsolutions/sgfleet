@@ -1,4 +1,4 @@
-import type { User, Stats, UserSummary, SettingsDefaults, SglModel, ModelConfig, GeneratedConfig, FleetStats, AuditEntry, RequestLogEntry, LogEntry, ModelHealth, Model, DashboardStats, GPUInfo, HFModel, HFSearchResult, DiskUsage, LocalModel, DownloadJob, DockerImagesResponse, ModelVersion, FieldHistoryEntry } from './types'
+import type { User, Stats, UserSummary, SettingsDefaults, SglModel, ModelConfig, GeneratedConfig, FleetStats, AuditEntry, RequestLogEntry, LogEntry, ModelHealth, Model, DashboardStats, GPUInfo, HFModel, HFSearchResult, DiskUsage, LocalModel, DownloadJob, DockerImagesResponse, ModelVersion, FieldHistoryEntry, SetupStatus, SetupResult } from './types'
 
 const apiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
   const res = await fetch(`/admin${path}`, {
@@ -207,4 +207,9 @@ export const api = {
   getDownloadStatus: () =>
     apiFetch<{ downloads: DownloadJob[] }>('/api/download/status'),
   getDockerImages: () => apiFetch<DockerImagesResponse>('/api/download/docker-images'),
+
+  // Setup
+  getSetupStatus: () => apiFetch<SetupStatus>('/api/system/setup-status'),
+  completeSetup: (data: { admin_name: string; base_url: string; hf_token?: string }) =>
+    apiFetch<SetupResult>('/api/system/setup', { method: 'POST', body: JSON.stringify(data) }),
 }

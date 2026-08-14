@@ -6,6 +6,7 @@ import { api } from '../api/client'
 interface AuthContextType {
   authenticated: boolean
   loading: boolean
+  setupComplete: boolean
   login: (key: string) => Promise<boolean>
   logout: () => Promise<void>
 }
@@ -15,22 +16,37 @@ const AuthContext = createContext<AuthContextType | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authenticated, setAuthenticated] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [setupComplete, setSetupComplete] = useState(true)
   const navigate = useNavigate()
   const location = useLocation()
 
   useEffect(() => {
-    if (location.pathname === '/login') {
+    if (location.pathname === '/login' || location.pathname === '/setup') {
       setAuthenticated(false)
       setLoading(false)
       return
     }
-    api.checkAuth().then(() => {
-      setAuthenticated(true)
-      setLoading(false)
-    }).catch(() => {
-      setAuthenticated(false)
-      setLoading(false)
-    })
+    api.getSetupStatus()
+      .then((res) => {
+        setSetupComplete(res.setup_complete)
+        if (!res.setup_complete) {
+          setAuthenticated(false)
+          setLoading(false)
+          return
+        }
+        api.checkAuth().then(() => {
+          setAuthenticated(true)
+          setLoading(false)
+        }).catch(() => {
+          setAuthenticated(false)
+          setLoading(false)
+        })
+      })
+      .catch(() => {
+        setSetupComplete(false)
+        setAuthenticated(false)
+        setLoading(false)
+      })
   }, [location.pathname])
 
   const login = async (key: string): Promise<boolean> => {
@@ -51,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ authenticated, loading, login, logout }}>
+    <AuthContext.Provider value={{ authenticated, loading, setupComplete, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

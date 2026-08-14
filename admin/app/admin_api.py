@@ -16,7 +16,7 @@ from . import audit as audit_log
 from . import metrics as real_metrics
 from . import webhooks as webhook_notify
 from .auth import require_admin
-from .config import settings
+from .config import generate_key, settings
 from .db import (
     bootstrap_models_from_json,
     create_user,
@@ -190,7 +190,7 @@ async def create_new_user(request: Request, body: CreateUser):
     if not body.name or len(body.name) < 2:
         raise HTTPException(status_code=400, detail="Invalid name")
 
-    raw_key = settings.generate_key()
+    raw_key = generate_key()
     user = await create_user(
         body.name, raw_key, body.rate_limit, body.max_concurrent, body.request_cost, body.daily_quota
     )
@@ -318,7 +318,7 @@ async def rotate_user_key(request: Request, user_id: int):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    raw_key = settings.generate_key()
+    raw_key = generate_key()
     await rotate_key(user_id, raw_key)
     asyncio.create_task(audit_log.log_admin_action("rotate_key", user_id, user["name"], _client_ip(request)))
     asyncio.create_task(webhook_notify.notify("key_rotated", {"user_id": user_id, "user_name": user["name"]}))
@@ -906,7 +906,7 @@ async def generate_user_config(request: Request, user_id: int, body: GenerateCon
         raise HTTPException(status_code=404, detail="User not found")
 
     if body.rotate:
-        raw_key = settings.generate_key()
+        raw_key = generate_key()
         await rotate_key(user_id, raw_key)
     else:
         raw_key = user.get("api_key")
@@ -992,7 +992,7 @@ async def import_users(request: Request):
             if existing_user:
                 existing.append(name)
                 continue
-            raw_key = item.get("api_key") or settings.generate_key()
+            raw_key = item.get("api_key") or generate_key()
             await create_user(
                 name,
                 raw_key,
@@ -1034,15 +1034,18 @@ async def export_db(request: Request):
 async def rotate_admin_key(request: Request):
     """Rotate admin API key. Old key remains valid for 24h."""
     await require_admin(request)
-    new_key = settings.generate_key()
+    new_key = generate_key()
     import bcrypt
 
     hashed = bcrypt.hashpw(new_key.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    from datetime import datetime
+    from datetime import datetime, timedelta
 
+    from .crypto import encrypt
+
+    encrypted = encrypt(new_key)
     async with get_db() as db:
         # Store old key with expiration
-        old_expired = datetime.now().isoformat()
+        old_expired = (datetime.now() + timedelta(hours=24)).isoformat()
         async with db.execute("SELECT value FROM config WHERE key = ?", ("admin_api_key_hash",)) as cursor:
             current = await cursor.fetchone()
         if current:
@@ -1053,6 +1056,7 @@ async def rotate_admin_key(request: Request):
                 "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_old_expires", old_expired)
             )
         await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_hash", hashed))
+        await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_enc", encrypted))
         await db.commit()
     # Update in-memory settings so new sessions can be created
     object.__setattr__(settings, "admin_api_key", new_key)
@@ -1768,3 +1772,48 @@ async def create_model_from_download(request: Request):
     config = generate_model_config(hf_model, abs_target, gpu_indices)
     await db_module.create_model(config)
     return {"model_id": config["model_id"], "config": config}
+
+
+# --- Setup Endpoints (public, no auth required) ---
+
+
+@router.get("/admin/api/system/setup-status")
+async def get_setup_status():
+    """Check if first-boot setup wizard has been completed. Public endpoint."""
+    from .db import is_setup_complete
+
+    complete = await is_setup_complete()
+    return {"setup_complete": complete}
+
+
+@router.post("/admin/api/system/setup")
+async def complete_setup(request: Request):
+    """Complete first-boot setup wizard. Stores admin credentials, base URL, and optionally HF token."""
+    from .db import is_setup_complete, set_admin_credentials
+    from .hf_downloader import set_hf_token, set_sgfleet_base_url
+
+    if await is_setup_complete():
+        raise HTTPException(status_code=400, detail="Setup already completed")
+
+    data = await request.json()
+    admin_name = data.get("admin_name", "admin").strip()
+    base_url = data.get("base_url", "").strip()
+    hf_token = data.get("hf_token", "").strip()
+
+    if not admin_name:
+        raise HTTPException(status_code=400, detail="Admin name is required")
+
+    raw_key = generate_key()
+    await set_admin_credentials(admin_name, raw_key)
+
+    if base_url:
+        await set_sgfleet_base_url(base_url)
+
+    if hf_token:
+        await set_hf_token(hf_token)
+
+    return {
+        "setup_complete": True,
+        "admin_name": admin_name,
+        "admin_api_key": raw_key,
+    }

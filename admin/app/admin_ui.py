@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 
 from . import audit as audit_log
 from .auth import _COOKIE_NAME, _SESSION_MAX_AGE, _check_token, create_session_token
-from .db import get_db, verify_key
+from .db import get_db, load_admin_api_key, verify_key
 
 router = APIRouter()
 
@@ -62,7 +62,8 @@ async def login_post(request: Request):
             return RedirectResponse(url="/admin/login", status_code=303)
 
     response = RedirectResponse(url="/admin/", status_code=302)
-    token = create_session_token()
+    admin_key = await load_admin_api_key()
+    token = create_session_token(admin_key)
     response.set_cookie(
         key=_COOKIE_NAME,
         value=token,
@@ -117,19 +118,31 @@ async def login_page(request: Request):
     return HTMLResponse("<h1>SPA not built</h1>")
 
 
+@router.get("/admin/setup")
+async def setup_page(request: Request):
+    index = os.path.join(spa_dir, "index.html")
+    if os.path.exists(index):
+        return FileResponse(index)
+    return HTMLResponse("<h1>SPA not built</h1>")
+
+
 @router.get("/admin")
 async def admin_redirect(request: Request):
     cookie = request.cookies.get(_COOKIE_NAME)
-    if cookie and _check_token(cookie):
-        return RedirectResponse(url="/admin/", status_code=301)
+    if cookie:
+        key = await load_admin_api_key()
+        if key and _check_token(cookie, key):
+            return RedirectResponse(url="/admin/", status_code=301)
     return RedirectResponse(url="/admin/login", status_code=302)
 
 
 @router.get("/admin/")
 async def admin_home(request: Request):
     cookie = request.cookies.get(_COOKIE_NAME)
-    if cookie and _check_token(cookie):
-        return FileResponse(os.path.join(spa_dir, "index.html"))
+    if cookie:
+        key = await load_admin_api_key()
+        if key and _check_token(cookie, key):
+            return FileResponse(os.path.join(spa_dir, "index.html"))
     return RedirectResponse(url="/admin/login", status_code=302)
 
 

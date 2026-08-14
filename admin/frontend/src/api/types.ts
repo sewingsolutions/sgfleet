@@ -275,3 +275,13 @@ export interface DockerImagesResponse {
   images: string[]
   error?: string
 }
+
+export interface SetupStatus {
+  setup_complete: boolean
+}
+
+export interface SetupResult {
+  setup_complete: boolean
+  admin_name: string
+  admin_api_key: string
+}

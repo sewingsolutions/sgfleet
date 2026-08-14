@@ -160,6 +160,20 @@ def _determine_target_endpoint(body: bytes) -> tuple[str | None, str | None]:
 
 
 async def proxy_request(request: Request):
+    from .db import is_setup_complete
+
+    if not await is_setup_complete():
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "message": "System setup not complete",
+                    "type": "setup_required",
+                    "code": "setup_required",
+                }
+            },
+        )
+
     user = await authenticate_user(request)
     request_id = str(uuid.uuid4())
     if not user:
@@ -499,6 +513,15 @@ async def proxy_request(request: Request):
 
 
 async def passthrough_proxy(request: Request):
+    from .db import is_setup_complete
+
+    if not await is_setup_complete():
+        return Response(
+            content='{"detail":"System setup not complete"}',
+            status_code=503,
+            media_type="application/json",
+        )
+
     endpoint = get_cached_active_endpoint()
     target = endpoint + request.url.path if endpoint else "http://localhost" + request.url.path
     if str(request.query_params):
