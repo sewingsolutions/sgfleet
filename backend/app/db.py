@@ -1161,6 +1161,7 @@ async def _get_user_by_token_unsafe(token: str) -> dict | None:
             return dict(
                 id=candidate["id"],
                 name=candidate["name"],
+                api_key=token,
                 api_key_hash=candidate["api_key_hash"],
                 is_active=bool(candidate["is_active"]),
                 rate_limit=candidate["rate_limit"],
@@ -1181,6 +1182,7 @@ async def _get_user_by_token_unsafe(token: str) -> dict | None:
             return dict(
                 id=ud["id"],
                 name=ud["name"],
+                api_key=token,
                 api_key_hash=ud["api_key_hash"],
                 is_active=bool(ud["is_active"]),
                 rate_limit=ud["rate_limit"],
@@ -1488,6 +1490,46 @@ async def get_admin_name() -> str:
         if row is None:
             return "admin"
         return row["value"]
+
+
+async def get_user_requests(user_id: int, limit: int = 50, offset: int = 0) -> list[dict]:
+    """Get paginated request_log entries for a specific user."""
+    async with (
+        get_db() as db,
+        db.execute(
+            """SELECT id, timestamp, user_id, request_id, method, endpoint, status, latency_ms, error_msg,
+                      COALESCE(prompt_tokens, 0) as prompt_tokens, COALESCE(completion_tokens, 0) as completion_tokens
+               FROM request_log WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?""",
+            (user_id, limit, offset),
+        ) as cursor,
+    ):
+        rows = await cursor.fetchall()
+        return [
+            {
+                "id": r[0],
+                "timestamp": r[1],
+                "user_id": r[2],
+                "request_id": r[3],
+                "method": r[4],
+                "endpoint": r[5],
+                "status": r[6],
+                "latency_ms": r[7],
+                "error_msg": r[8],
+                "prompt_tokens": r[9],
+                "completion_tokens": r[10],
+            }
+            for r in rows
+        ]
+
+
+async def count_user_requests(user_id: int) -> int:
+    """Count total request_log entries for a specific user."""
+    async with (
+        get_db() as db,
+        db.execute("SELECT COUNT(*) FROM request_log WHERE user_id = ?", (user_id,)) as cursor,
+    ):
+        row = await cursor.fetchone()
+        return row[0] if row else 0
 
 
 async def load_admin_api_key() -> str:

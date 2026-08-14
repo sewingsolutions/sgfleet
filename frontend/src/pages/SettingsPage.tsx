@@ -66,7 +66,7 @@ export default function SettingsPage() {
   }, [updateDefaults])
 
   const handleExportUsers = async () => {
-    const res = await fetch('/admin/api/users', { credentials: 'same-origin' })
+    const res = await fetch('/api/users', { credentials: 'same-origin' })
     const users = await res.json()
     const blob = new Blob([JSON.stringify(users, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)

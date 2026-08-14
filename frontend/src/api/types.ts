@@ -288,3 +288,86 @@ export interface SetupResult {
   admin_name: string
   admin_api_key: string
 }
+
+export interface UserSession {
+  role?: 'admin' | 'user'
+  name?: string
+  user_id?: number
+  error?: string
+}
+
+export interface UserProfile {
+  id: number
+  name: string
+  rate_limit: number
+  max_concurrent: number
+  daily_quota: number | null
+  request_cost: number
+  created_at: string
+  email: string | null
+  notes: string | null
+}
+
+export interface UserAuthorizedModel {
+  model_id: string
+  name: string
+  active: boolean
+  ready: boolean
+  model_alias: string
+}
+
+export interface UserModelsResponse {
+  models: UserAuthorizedModel[]
+}
+
+export interface UserStats {
+  labels: string[]
+  requests: number[]
+  latency_p50: number[]
+  latency_p95: number[]
+  count_429: number[]
+  prompt_tokens: number[]
+  completion_tokens: number[]
+  total_tokens: number[]
+  today_requests: number
+  in_memory_note: boolean
+}
+
+export interface UserRequestEntry {
+  id: number
+  timestamp: string
+  user_id: number | null
+  request_id: string
+  method: string
+  endpoint: string
+  status: number
+  latency_ms: number
+  error_msg: string
+  prompt_tokens: number
+  completion_tokens: number
+}
+
+export interface UserRequestsResponse {
+  requests: UserRequestEntry[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface UserQuota {
+  daily_quota: number | null
+  today_requests: number
+  remaining: number | null
+  usage_percent: number | null
+  total_requests: number
+  total_tokens: number
+  total_prompt_tokens: number
+  total_completion_tokens: number
+}
+
+export interface UserConfigResponse {
+  api_key: string
+  config: Record<string, unknown>
+  config_json: string
+  error?: string
+}

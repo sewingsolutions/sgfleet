@@ -3,10 +3,14 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 import { useNavigate, useLocation } from 'react-router-dom'
 import { api } from '../api/client'
 
+type Role = 'admin' | 'user' | null
+
 interface AuthContextType {
   authenticated: boolean
   loading: boolean
   setupComplete: boolean
+  role: Role
+  name: string
   login: (key: string) => Promise<boolean>
   logout: () => Promise<void>
 }
@@ -17,16 +21,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authenticated, setAuthenticated] = useState(false)
   const [loading, setLoading] = useState(true)
   const [setupComplete, setSetupComplete] = useState(true)
+  const [role, setRole] = useState<Role>(null)
+  const [name, setName] = useState('')
   const navigate = useNavigate()
   const location = useLocation()
 
   useEffect(() => {
-    // Always refresh setup status so a stale `setupComplete=false` from a prior
-    // route (e.g. before the wizard was completed) can't bounce the user back
-    // to /setup after they log in. This closes a timing bug where finishing
-    // the wizard then logging in would redirect straight back to /setup.
     if (location.pathname === '/login' || location.pathname === '/setup') {
       setAuthenticated(false)
+      setRole(null)
       api.getSetupStatus()
         .then((res) => setSetupComplete(res.setup_complete))
         .catch(() => { /* leave prior value */ })
@@ -38,35 +41,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSetupComplete(res.setup_complete)
         if (!res.setup_complete) {
           setAuthenticated(false)
+          setRole(null)
           setLoading(false)
           return
         }
-        api.checkAuth().then(() => {
-          setAuthenticated(true)
+        api.checkSession().then((session) => {
+          if (session.error) {
+            setAuthenticated(false)
+            setRole(null)
+          } else {
+            setAuthenticated(true)
+            setRole(session.role ?? null)
+            setName(session.name ?? '')
+          }
           setLoading(false)
         }).catch(() => {
           setAuthenticated(false)
+          setRole(null)
           setLoading(false)
         })
       })
       .catch(() => {
         setSetupComplete(false)
         setAuthenticated(false)
+        setRole(null)
         setLoading(false)
       })
   }, [location.pathname])
 
   const login = async (key: string): Promise<boolean> => {
     const res = await api.login(key)
-    // fetch follows 302 automatically; check final URL
-    if (res.url.includes('/admin/') && !res.url.includes('/admin/login')) {
-      // Login only succeeds when setup is complete on the backend, so make
-      // sure the client-side flag reflects that before we navigate — otherwise
-      // ProtectedRoute may see stale `setupComplete=false` and redirect the
-      // user back to /setup.
+    if (res.url.includes('/admin/') && !res.url.includes('/login')) {
       setSetupComplete(true)
       setAuthenticated(true)
-      navigate('/users', { replace: true })
+      setRole('admin')
+      navigate('/admin/', { replace: true })
+      return true
+    }
+    if (res.url.includes('/user/') && !res.url.includes('/login')) {
+      setSetupComplete(true)
+      setAuthenticated(true)
+      setRole('user')
+      navigate('/user/', { replace: true })
       return true
     }
     return false
@@ -75,11 +91,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     await api.logout()
     setAuthenticated(false)
+    setRole(null)
+    setName('')
     navigate('/login', { replace: true })
   }
 
   return (
-    <AuthContext.Provider value={{ authenticated, loading, setupComplete, login, logout }}>
+    <AuthContext.Provider value={{ authenticated, loading, setupComplete, role, name, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

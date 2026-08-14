@@ -112,7 +112,7 @@ export default function ModelDownloadPage() {
         // Start SSE to follow progress (uses /follow, not /stream)
         const abort = new AbortController()
         abortRef.current = abort
-        const url = `/admin/api/download/follow?target_dir=${encodeURIComponent(job.target_dir)}`
+        const url = `/api/download/follow?target_dir=${encodeURIComponent(job.target_dir)}`
 
         fetch(url, { signal: abort.signal }).then(async (response) => {
           const reader = response.body?.getReader()
@@ -139,7 +139,7 @@ export default function ModelDownloadPage() {
                   setDownloadState('complete')
                   setDownloadProgress(100)
                   if (modelMatch && !cancelled) {
-                    await fetch('/admin/api/download/model-config', {
+                    await fetch('/api/download/model-config', {
                       method: 'POST',
                       credentials: 'same-origin',
                       headers: { 'Content-Type': 'application/json' },
@@ -240,7 +240,7 @@ export default function ModelDownloadPage() {
 
     const gpuParam = selectedGpus.length ? `&gpus=${selectedGpus.join(',')}` : ''
     const expectedBytes = selectedModel.storage_bytes || 0
-    const url = `/admin/api/download/stream?model_id=${encodeURIComponent(selectedModel.id)}&target_dir=${encodeURIComponent(targetDir)}&expected_bytes=${expectedBytes}${gpuParam}`
+    const url = `/api/download/stream?model_id=${encodeURIComponent(selectedModel.id)}&target_dir=${encodeURIComponent(targetDir)}&expected_bytes=${expectedBytes}${gpuParam}`
 
     try {
       const response = await fetch(url, { signal: abort.signal })

@@ -10,7 +10,7 @@ vi.mock('react-router-dom', () => ({
   MemoryRouter: ({ children }: { children: React.ReactNode }) => children,
 }))
 
-const mockCheckAuth = vi.fn()
+const mockCheckSession = vi.fn()
 const mockLogin = vi.fn()
 const mockLogout = vi.fn()
 const mockGetSetupStatus = vi.fn()
@@ -18,7 +18,7 @@ const mockGetSetupStatus = vi.fn()
 vi.mock('../src/api/client', () => ({
   api: {
     getSetupStatus: () => mockGetSetupStatus(),
-    checkAuth: () => mockCheckAuth(),
+    checkSession: () => mockCheckSession(),
     login: (key: string) => mockLogin(key),
     logout: () => mockLogout(),
   },
@@ -33,7 +33,7 @@ describe('AuthContext', () => {
   })
 
   test('initial state: loading=true, authenticated=false', async () => {
-    mockCheckAuth.mockReturnValue(new Promise(() => {}))
+    mockCheckSession.mockReturnValue(new Promise(() => {}))
 
     const { AuthProvider, useAuth } = await import('../src/context/AuthContext')
 
@@ -49,8 +49,8 @@ describe('AuthContext', () => {
     expect(result.current.authenticated).toBe(false)
   })
 
-  test('checkAuth success sets authenticated=true', async () => {
-    mockCheckAuth.mockResolvedValue([])
+  test('checkSession success sets authenticated=true', async () => {
+    mockCheckSession.mockResolvedValue({ role: 'admin', name: 'Admin' })
 
     const { AuthProvider, useAuth } = await import('../src/context/AuthContext')
 
@@ -68,8 +68,8 @@ describe('AuthContext', () => {
     })
   })
 
-  test('checkAuth failure sets authenticated=false', async () => {
-    mockCheckAuth.mockRejectedValue(new Error('Unauthorized'))
+  test('checkSession failure sets authenticated=false', async () => {
+    mockCheckSession.mockRejectedValue(new Error('Unauthorized'))
 
     const { AuthProvider, useAuth } = await import('../src/context/AuthContext')
 
@@ -88,8 +88,8 @@ describe('AuthContext', () => {
   })
 
   test('login success sets authenticated and navigates', async () => {
-    mockCheckAuth.mockResolvedValue([])
-    mockLogin.mockResolvedValue({ url: '/admin/users' } as Response)
+    mockCheckSession.mockResolvedValue({ role: 'admin', name: 'Admin' })
+    mockLogin.mockResolvedValue({ url: '/user/' } as Response)
 
     const { AuthProvider, useAuth } = await import('../src/context/AuthContext')
 
@@ -101,7 +101,7 @@ describe('AuthContext', () => {
       ),
     })
 
-    // Wait for initial checkAuth to complete
+    // Wait for initial checkSession to complete
     await waitFor(() => result.current.authenticated === true)
 
     await act(async () => {
@@ -112,12 +112,12 @@ describe('AuthContext', () => {
     await waitFor(() => {
       expect(result.current.authenticated).toBe(true)
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/users', { replace: true })
+    expect(mockNavigate).toHaveBeenCalledWith('/user/', { replace: true })
   })
 
   test('login failure returns false', async () => {
-    mockCheckAuth.mockResolvedValue([])
-    mockLogin.mockResolvedValue({ url: '/admin/login' } as Response)
+    mockCheckSession.mockResolvedValue({ role: 'admin', name: 'Admin' })
+    mockLogin.mockResolvedValue({ url: '/login' } as Response)
 
     const { AuthProvider, useAuth } = await import('../src/context/AuthContext')
 
@@ -129,7 +129,7 @@ describe('AuthContext', () => {
       ),
     })
 
-    // Wait for initial checkAuth to complete
+    // Wait for initial checkSession to complete
     await waitFor(() => result.current.authenticated === true)
 
     await act(async () => {
@@ -140,7 +140,7 @@ describe('AuthContext', () => {
     expect(result.current.authenticated).toBe(true)
   })
 
-  test('setup incomplete sets setupComplete=false and skips checkAuth', async () => {
+  test('setup incomplete sets setupComplete=false and skips checkSession', async () => {
     mockGetSetupStatus.mockResolvedValue({ setup_complete: false })
 
     const { AuthProvider, useAuth } = await import('../src/context/AuthContext')
@@ -158,7 +158,7 @@ describe('AuthContext', () => {
       expect(result.current.authenticated).toBe(false)
       expect(result.current.loading).toBe(false)
     })
-    expect(mockCheckAuth).not.toHaveBeenCalled()
+    expect(mockCheckSession).not.toHaveBeenCalled()
   })
 
   test('getSetupStatus error treats setup as incomplete', async () => {
@@ -179,11 +179,11 @@ describe('AuthContext', () => {
       expect(result.current.authenticated).toBe(false)
       expect(result.current.loading).toBe(false)
     })
-    expect(mockCheckAuth).not.toHaveBeenCalled()
+    expect(mockCheckSession).not.toHaveBeenCalled()
   })
 
   test('logout calls api.logout and navigates to /login', async () => {
-    mockCheckAuth.mockResolvedValue([])
+    mockCheckSession.mockResolvedValue({ role: 'admin', name: 'Admin' })
     mockLogout.mockResolvedValue({} as Response)
 
     const { AuthProvider, useAuth } = await import('../src/context/AuthContext')
@@ -196,7 +196,7 @@ describe('AuthContext', () => {
       ),
     })
 
-    // Wait for initial checkAuth
+    // Wait for initial checkSession
     await waitFor(() => result.current.authenticated === true)
 
     await act(async () => {

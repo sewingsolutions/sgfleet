@@ -1,7 +1,7 @@
-import type { User, Stats, UserSummary, SettingsDefaults, SglModel, ModelConfig, GeneratedConfig, FleetStats, AuditEntry, RequestLogEntry, LogEntry, ModelHealth, Model, DashboardStats, GPUInfo, HFModel, HFSearchResult, DiskUsage, LocalModel, DownloadJob, DockerImagesResponse, ModelVersion, FieldHistoryEntry, SetupStatus, SetupResult } from './types'
+import type { User, Stats, UserSummary, SettingsDefaults, SglModel, ModelConfig, GeneratedConfig, FleetStats, AuditEntry, RequestLogEntry, LogEntry, ModelHealth, Model, DashboardStats, GPUInfo, HFModel, HFSearchResult, DiskUsage, LocalModel, DownloadJob, DockerImagesResponse, ModelVersion, FieldHistoryEntry, SetupStatus, SetupResult, UserSession, UserProfile, UserModelsResponse, UserStats, UserRequestsResponse, UserQuota, UserConfigResponse } from './types'
 
 const apiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
-  const res = await fetch(`/admin${path}`, {
+  const res = await fetch(path, {
     ...options,
     credentials: 'same-origin',
     headers: {
@@ -17,6 +17,29 @@ const apiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Unknown error' }))
     throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+
+  if (res.status === 204) return undefined as T
+  return res.json()
+}
+
+const userApiFetch = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
+  const res = await fetch(`/api${path}`, {
+    ...options,
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  })
+
+  if (res.status === 401) {
+    throw new Error('Unauthorized')
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Unknown error' }))
+    throw new Error(err.detail || err.error || `HTTP ${res.status}`)
   }
 
   if (res.status === 204) return undefined as T
@@ -56,15 +79,25 @@ export const api = {
     apiFetch<{ saved: boolean }>('/api/settings/base-url', { method: 'POST', body: JSON.stringify({ url }) }),
 
   // Auth
+  // NOTE: we let fetch follow the 302 so `res.url` reflects the redirect target
+  // (with `redirect: 'manual'` the response is opaqueredirect and `res.url` is '').
+  // The Set-Cookie header from the 302 is still applied by the browser.
   login: (key: string) =>
-    fetch('/admin/login', {
+    fetch('/login', {
       method: 'POST',
       credentials: 'same-origin',
+      redirect: 'follow',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: `key=${encodeURIComponent(key)}`,
     }),
-  logout: () => fetch('/admin/logout', { credentials: 'same-origin' }),
+  logout: () => fetch('/logout', { credentials: 'same-origin' }),
   checkAuth: () => apiFetch<User[]>('/api/users'),
+  checkSession: () => {
+    return fetch('/api/session', {
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+    }).then(r => r.json()) as Promise<UserSession>
+  },
 
   // Models & config
   getModelConfig: (modelId?: string) =>
@@ -212,4 +245,16 @@ export const api = {
   getSetupStatus: () => apiFetch<SetupStatus>('/api/system/setup-status'),
   completeSetup: (data: { admin_name: string; base_url: string; hf_token?: string }) =>
     apiFetch<SetupResult>('/api/system/setup', { method: 'POST', body: JSON.stringify(data) }),
+
+  // User dashboard API
+  user: {
+    getMe: () => userApiFetch<UserProfile>('/user/me'),
+    getModels: () => userApiFetch<UserModelsResponse>('/user/models'),
+    getStats: (range: string = 'today') => userApiFetch<UserStats>(`/user/stats?range=${range}`),
+    getRequests: (limit: number = 50, offset: number = 0) =>
+      userApiFetch<UserRequestsResponse>(`/user/requests?limit=${limit}&offset=${offset}`),
+    getQuota: () => userApiFetch<UserQuota>('/user/quota'),
+    generateConfig: (client: string = 'opencode') =>
+      userApiFetch<UserConfigResponse>('/user/config', { method: 'POST', body: JSON.stringify({ client }) }),
+  },
 }

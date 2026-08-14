@@ -6,13 +6,14 @@ import { api } from '../api/client'
 import type { Model, ModelHealth } from '../api/types'
 
 const links = [
-  { to: '/users', label: 'Users' },
-  { to: '/metrics', label: 'Metrics' },
-  { to: '/models', label: 'Models' },
+  { to: '/admin/', label: 'Dashboard' },
+  { to: '/admin/users', label: 'Users' },
+  { to: '/admin/metrics', label: 'Metrics' },
+  { to: '/admin/models', label: 'Models' },
 
-  { to: '/logs', label: 'Logs' },
-  { to: '/audit', label: 'Audit' },
-  { to: '/settings', label: 'Settings' },
+  { to: '/admin/logs', label: 'Logs' },
+  { to: '/admin/audit', label: 'Audit' },
+  { to: '/admin/settings', label: 'Settings' },
 ]
 
 const themeOptions = [
@@ -245,7 +246,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-6">
             {links.map(({ to, label }) => {
-              const isActive = to === '/' ? pathname === '/' : pathname.startsWith(to)
+              const isActive = to === '/admin/' ? pathname === '/admin/' : pathname.startsWith(to)
               return (
                 <Link
                   key={to}
@@ -325,7 +326,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </div>
             )}
             {links.map(({ to, label }) => {
-              const isActive = to === '/' ? pathname === '/' : pathname.startsWith(to)
+              const isActive = to === '/admin/' ? pathname === '/admin/' : pathname.startsWith(to)
               return (
                 <Link
                   key={to}
