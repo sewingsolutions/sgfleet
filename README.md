@@ -1,6 +1,7 @@
 # SGFleet
-
-Self-hosted LLM inference gateway with multi-model management, auth, rate limiting, and monitoring. Currently supports Nvidia GPUs.
+SGFleet is a self-hosted AI gateway and container orchestrator built specifically for SGLang. 
+Manage users, quotas, Hugging Face models, and GPU Docker containers from a single Web UI.
+Currently supports Nvidia GPUs.
 
 ## Architecture
 
@@ -30,6 +31,20 @@ Models are discovered from your local model directory. Place model directories u
 The first model added will be set as active. You can change which model is active, or add and remove models at any time from the admin UI. Only one model is active at a time; the active model receives the `sgfleet-server` network alias. A `models.json.example` file is provided as a template for manual configuration.
 
 **Download new models**: The admin dashboard includes a model download page that searches HuggingFace Hub, checks available VRAM, and downloads models directly to disk with real-time progress. For gated models, set a HuggingFace API token via Settings.
+
+## Prerequisites
+
+SGFleet requires a Linux host with Docker and GPU passthrough. Run `./scripts/init.sh` to verify — it checks for:
+
+| Requirement | Script behavior | Notes |
+|---|---|---|
+| Docker | Fails if missing | Engine and CLI |
+| Docker Compose | Fails if missing | Compose plugin (v2) |
+| `nvidia-smi` | Warns if absent; fails if present but broken | GPU driver check |
+| `nvidia-ctk` | Warns if absent | NVIDIA Container Toolkit — containers cannot access GPUs without it. Install from [NVIDIA docs](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) |
+| `openssl` | Fails if missing | Generates the encryption key for secrets management |
+
+**Nvidia GPUs are the only supported hardware.** AMD/Intel GPUs are not supported. Both `nvidia-smi` and `nvidia-ctk` are needed for model inference even though the setup script only warns about them.
 
 ## Quick start
 
