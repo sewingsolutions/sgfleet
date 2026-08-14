@@ -3,6 +3,8 @@ SGFleet is a self-hosted AI gateway and container orchestrator built specificall
 Manage users, quotas, Hugging Face models, and GPU Docker containers from a single Web UI.
 Currently supports Nvidia GPUs.
 
+Supports generation of config for Opencode. Other tools like Cursor, Aider, and custom multi-agent scripts can also use the OpenAI-compatible endpoints. Implementation of generators for that is in progress.
+
 ## Architecture
 
 ```
@@ -65,6 +67,9 @@ On startup, backend:
 1. Seeds the `models` table from `models.json` if exists
 2. Starts any active model container via `docker run`
 3. Returns 503 on `/v1/*` until a model is ready
+
+## Screenshots
+Have a look at [SCREENSHOTS.md](SCREENSHOTS.md) for a visual overview of the admin dashboard and model management.
 
 ## Components
 
