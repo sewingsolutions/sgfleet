@@ -5,4 +5,4 @@ cd "$SCRIPT_DIR"
 ruff check app/ tests/
 ruff format app/ tests/
 cd ..
-docker compose up -d --build admin
+docker compose up -d --build backend

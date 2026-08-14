@@ -68,7 +68,7 @@ from .model_registry import (
 logger = logging.getLogger("sgfleet-admin")
 _startup_time = time.time()
 
-router = APIRouter(prefix="/admin/api")
+router = APIRouter(prefix="/api")
 
 
 @router.get("/dashboard")
@@ -1777,7 +1777,7 @@ async def create_model_from_download(request: Request):
 # --- Setup Endpoints (public, no auth required) ---
 
 
-@router.get("/admin/api/system/setup-status")
+@router.get("/system/setup-status")
 async def get_setup_status():
     """Check if first-boot setup wizard has been completed. Public endpoint."""
     from .db import is_setup_complete
@@ -1786,7 +1786,7 @@ async def get_setup_status():
     return {"setup_complete": complete}
 
 
-@router.post("/admin/api/system/setup")
+@router.post("/system/setup")
 async def complete_setup(request: Request):
     """Complete first-boot setup wizard. Stores admin credentials, base URL, and optionally HF token."""
     from .db import is_setup_complete, set_admin_credentials

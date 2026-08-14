@@ -1,7 +1,7 @@
 services:
-  admin:
-    build: ./admin
-    container_name: sgfleet-admin
+  backend:
+    build: ./backend
+    container_name: sgfleet-backend
     restart: unless-stopped
     deploy:
       resources:
@@ -15,8 +15,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
-    ports:
-      - "8000:8000"
     volumes:
       - admin_db:/data
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -27,14 +25,27 @@ services:
     environment:
       - SGFLEET_ENCRYPTION_KEY=${SGFLEET_ENCRYPTION_KEY}
       - SGFLEET_BASE_URL=${SGFLEET_BASE_URL:-}
-      # Host path used when the admin spawns model containers via the docker
-      # socket. Must match the source of the bind mount above.
       - HOST_MODELS_DIR=${MODELS_DIR:-YOUR_MODELS_PATH/vllm_models}
+
+  frontend:
+    build: ./frontend
+    container_name: sgfleet-frontend
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      - backend
+
   alloy:
     image: grafana/alloy:latest
     container_name: sgfleet-alloy
     restart: unless-stopped
-    profile:
+    profiles:
       - monitoring
     logging:
       driver: json-file
@@ -42,7 +53,7 @@ services:
         max-size: "10m"
         max-file: "3"
     volumes:
-      - ./alloy/generate-config.sh:/usr/local/bin/generate-config.sh:ro
+      - ./telemetry/alloy/generate-config.sh:/usr/local/bin/generate-config.sh:ro
       - alloy_config:/etc/alloy
       - alloy_data:/tmp
     environment:
@@ -50,7 +61,7 @@ services:
     entrypoint: >
       sh -c "generate-config.sh && exec alloy run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/tmp/alloy /etc/alloy/runtime.alloy"
     depends_on:
-      - admin
+      - backend
 volumes:
   admin_db:
     name: sgfleet_admin_db

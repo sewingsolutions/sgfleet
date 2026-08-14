@@ -194,7 +194,7 @@ class TestAdminAPI:
     """Integration tests for admin API endpoints."""
 
     def test_dashboard_requires_auth(self, client):
-        resp = client.get("/admin/api/dashboard")
+        resp = client.get("/api/dashboard")
         assert resp.status_code in (303, 302, 401)
 
 
@@ -202,9 +202,9 @@ class TestAdminLogin:
     """Integration tests for admin login endpoint."""
 
     def test_login_returns_redirect(self, client):
-        resp = client.post("/admin/login", data={"key": "invalid-key"}, follow_redirects=False)
+        resp = client.post("/login", data={"key": "invalid-key"}, follow_redirects=False)
         assert resp.status_code == 303
 
     def test_logout_redirects(self, client):
-        resp = client.get("/admin/logout", follow_redirects=False)
+        resp = client.get("/logout", follow_redirects=False)
         assert resp.status_code == 303

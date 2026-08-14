@@ -18,7 +18,6 @@ from fastapi import HTTPException
 
 
 class TestSetupHelpers:
-
     @pytest.mark.asyncio
     async def test_is_setup_complete_false_by_default(self):
         assert await is_setup_complete() is False
@@ -38,7 +37,9 @@ class TestSetupHelpers:
         async with get_db() as db:
             await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_name", "TestAdmin"))
             await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_hash", hashed))
-            await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_enc", encrypted))
+            await db.execute(
+                "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_enc", encrypted)
+            )
             await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("setup_complete", "true"))
             await db.commit()
 
@@ -74,10 +75,9 @@ def _make_request(path: str, headers: dict | None = None):
 
 
 class TestRequireAdminSetupGate:
-
     @pytest.mark.asyncio
     async def test_require_admin_rejects_before_setup(self):
-        request = _make_request("/admin/api/dashboard")
+        request = _make_request("/api/dashboard")
         with pytest.raises(HTTPException) as exc_info:
             await require_admin(request)
         assert exc_info.value.status_code == 403
@@ -93,10 +93,12 @@ class TestRequireAdminSetupGate:
             await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("setup_complete", "true"))
             await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_name", "TestAdmin"))
             await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_hash", hashed))
-            await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_enc", encrypted))
+            await db.execute(
+                "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_enc", encrypted)
+            )
             await db.commit()
 
-        request = _make_request("/admin/api/dashboard", {"authorization": "Bearer my-secret-key-123"})
+        request = _make_request("/api/dashboard", {"authorization": "Bearer my-secret-key-123"})
         await require_admin(request)
 
     @pytest.mark.asyncio
@@ -107,17 +109,18 @@ class TestRequireAdminSetupGate:
         async with get_db() as db:
             await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("setup_complete", "true"))
             await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_hash", hashed))
-            await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_enc", encrypted))
+            await db.execute(
+                "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_enc", encrypted)
+            )
             await db.commit()
 
-        request = _make_request("/admin/api/dashboard", {"authorization": "Bearer wrong-key"})
+        request = _make_request("/api/dashboard", {"authorization": "Bearer wrong-key"})
         with pytest.raises(HTTPException) as exc_info:
             await require_admin(request)
         assert exc_info.value.status_code == 401
 
 
 class TestHfDownloaderEncryptedToken:
-
     @pytest.mark.asyncio
     async def test_set_and_get_hf_token(self):
         await set_hf_token("hf-test-token-abc")

@@ -36,11 +36,15 @@ async def require_admin(request: Request):
             if row and verify_key(token, row["value"]):
                 authenticated = True
             if not authenticated:
-                async with db.execute("SELECT key, value FROM config WHERE key IN (?, ?)", ("admin_api_key_hash_old", "admin_api_key_old_expires")) as cursor:
+                async with db.execute(
+                    "SELECT key, value FROM config WHERE key IN (?, ?)",
+                    ("admin_api_key_hash_old", "admin_api_key_old_expires"),
+                ) as cursor:
                     rows = await cursor.fetchall()
                 config = {row["key"]: row["value"] for row in rows}
                 if config.get("admin_api_key_hash_old"):
                     from datetime import datetime
+
                     expires = datetime.fromisoformat(config["admin_api_key_old_expires"])
                     if datetime.now() < expires and verify_key(token, config["admin_api_key_hash_old"]):
                         authenticated = True
@@ -67,10 +71,14 @@ async def require_admin(request: Request):
 
     cookie = request.cookies.get(_COOKIE_NAME)
     if cookie:
-        async with get_db() as db, db.execute("SELECT value FROM config WHERE key = ?", ("admin_api_key_enc",)) as cursor:
+        async with (
+            get_db() as db,
+            db.execute("SELECT value FROM config WHERE key = ?", ("admin_api_key_enc",)) as cursor,
+        ):
             row = await cursor.fetchone()
             if row and row["value"]:
                 from .crypto import decrypt
+
                 key = decrypt(row["value"])
                 if _check_token(cookie, key):
                     return

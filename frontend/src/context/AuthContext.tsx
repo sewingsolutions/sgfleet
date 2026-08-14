@@ -21,9 +21,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const location = useLocation()
 
   useEffect(() => {
+    // Always refresh setup status so a stale `setupComplete=false` from a prior
+    // route (e.g. before the wizard was completed) can't bounce the user back
+    // to /setup after they log in. This closes a timing bug where finishing
+    // the wizard then logging in would redirect straight back to /setup.
     if (location.pathname === '/login' || location.pathname === '/setup') {
       setAuthenticated(false)
-      setLoading(false)
+      api.getSetupStatus()
+        .then((res) => setSetupComplete(res.setup_complete))
+        .catch(() => { /* leave prior value */ })
+        .finally(() => setLoading(false))
       return
     }
     api.getSetupStatus()
@@ -53,6 +60,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api.login(key)
     // fetch follows 302 automatically; check final URL
     if (res.url.includes('/admin/') && !res.url.includes('/admin/login')) {
+      // Login only succeeds when setup is complete on the backend, so make
+      // sure the client-side flag reflects that before we navigate — otherwise
+      // ProtectedRoute may see stale `setupComplete=false` and redirect the
+      // user back to /setup.
+      setSetupComplete(true)
       setAuthenticated(true)
       navigate('/users', { replace: true })
       return true

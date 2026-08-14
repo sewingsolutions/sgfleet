@@ -492,7 +492,9 @@ async def migrate_to_v13(db):
 
 async def migrate_to_v14(db):
     """Add setup_complete flag. No schema changes — uses existing config table."""
-    async with db.execute("SELECT key FROM config WHERE key IN ('admin_api_key', 'admin_api_key_hash', 'admin_api_key_enc')") as cursor:
+    async with db.execute(
+        "SELECT key FROM config WHERE key IN ('admin_api_key', 'admin_api_key_hash', 'admin_api_key_enc')"
+    ) as cursor:
         row = await cursor.fetchone()
     if row:
         await db.execute("INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)", ("setup_complete", "true"))
@@ -1426,9 +1428,7 @@ async def is_setup_complete() -> bool:
 async def mark_setup_complete() -> None:
     """Mark setup as complete."""
     async with get_db() as db:
-        await db.execute(
-            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("setup_complete", "true")
-        )
+        await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("setup_complete", "true"))
         await db.commit()
 
 
@@ -1443,18 +1443,10 @@ async def set_admin_credentials(admin_name: str, raw_key: str) -> None:
     hashed = bcrypt_lib.hashpw(raw_key.encode("utf-8"), bcrypt_lib.gensalt()).decode("utf-8")
     encrypted = encrypt(raw_key)
     async with get_db() as db:
-        await db.execute(
-            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_name", admin_name)
-        )
-        await db.execute(
-            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_hash", hashed)
-        )
-        await db.execute(
-            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_enc", encrypted)
-        )
-        await db.execute(
-            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("setup_complete", "true")
-        )
+        await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_name", admin_name))
+        await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_hash", hashed))
+        await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("admin_api_key_enc", encrypted))
+        await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("setup_complete", "true"))
         await db.commit()
 
 

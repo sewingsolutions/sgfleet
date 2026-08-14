@@ -24,8 +24,8 @@ prometheus.scrape "sgfleet_server" {
 }
 
 prometheus.scrape "sgfleet_admin" {
-  targets       = [{"__address__" = "sgfleet-admin:8000"}]
-  metrics_path  = "/admin/api/metrics"
+  targets       = [{"__address__" = "sgfleet-backend:8000"}]
+  metrics_path  = "/api/metrics"
   job_name      = "sgfleet_admin"
   scrape_interval = "15s"
   forward_to    = [prometheus.remote_write.monitoring.receiver]

@@ -35,6 +35,7 @@ def clear_token_cache():
 def clear_crypto_key():
     """Reset the cached Fernet key before each test."""
     import sys
+
     import app.crypto
 
     app.crypto._key = None  # type: ignore[attr-defined]

@@ -532,9 +532,7 @@ async def set_hf_token(token: str) -> None:
 
     encrypted = encrypt(token)
     async with get_db() as db:
-        await db.execute(
-            "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("hf_api_token_enc", encrypted)
-        )
+        await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("hf_api_token_enc", encrypted))
         # Clean up plaintext copy if it exists
         await db.execute("DELETE FROM config WHERE key = 'hf_api_token'")
         await db.commit()

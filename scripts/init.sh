@@ -74,6 +74,7 @@ check_host_requirements() {
 # ── Load existing .env into associative array ────────────────────────
 declare -A existing_values
 declare -A has_key
+HAS_EXISTING_VARS=0
 
 load_existing() {
   [[ ! -f .env ]] && return 0
@@ -98,6 +99,7 @@ load_existing() {
 
       existing_values["$k"]="$v"
       has_key["$k"]=1
+      HAS_EXISTING_VARS=1
     fi
   done < .env
 }
@@ -126,7 +128,7 @@ prompt_infra() {
   esac
 
   # Check for existing value
-  if [[ "${has_key[$name]:-}" == "1" ]]; then
+  if [[ -v has_key["$name"] ]]; then
     local cur="${existing_values[$name]:-}"
     printf "\n${BOLD}%-26s${NC} (current: ${YELLOW}%s${NC})\n" "$desc" "$cur"
     while true; do
@@ -171,7 +173,7 @@ check_host_requirements
 
 # Step 2: Load existing .env
 load_existing
-if [[ ${#has_key[@]} -gt 0 ]]; then
+if [[ $HAS_EXISTING_VARS -eq 1 ]]; then
   echo -e "\n${YELLOW}Existing .env detected — you can keep, update, or remove values.${NC}"
 fi
 
@@ -186,8 +188,13 @@ prompt_infra "PROMETHEUS_HOST"
 
 # Step 4: Auto-generate values
 echo -e "\n${BOLD}Generating secure values...${NC}"
-SGFLEET_ENCRYPTION_KEY="$(openssl rand -hex 32)"
-echo -e "  ${GREEN}✓ Encryption key generated${NC}"
+if [[ -n "${existing_values[SGFLEET_ENCRYPTION_KEY]:-}" ]]; then
+  SGFLEET_ENCRYPTION_KEY="${existing_values[SGFLEET_ENCRYPTION_KEY]}"
+  echo -e "  ${GREEN}✓ Kept existing Encryption Key${NC}"
+else
+  SGFLEET_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+  echo -e "  ${GREEN}✓ Generated new Encryption Key${NC}"
+fi
 
 # HOST_MODELS_DIR defaults to MODELS_DIR
 HOST_MODELS_DIR="${result[MODELS_DIR]:-/models}"
@@ -234,6 +241,17 @@ esc_prom="$(env_escape "${result[PROMETHEUS_HOST]:-}")"
   else
     echo '# PROMETHEUS_HOST=""  # omit to disable metrics export'
   fi
+
+  echo ""
+  echo "# Custom user variables (preserved from previous .env)"
+      if [[ $HAS_EXISTING_VARS -eq 1 ]]; then
+        for k in "${!existing_values[@]}"; do
+          # Skip the keys we already explicitly manage above
+          if [[ "$k" != "MODELS_DIR" && "$k" != "HOST_MODELS_DIR" && "$k" != "DATA_DIR" && "$k" != "LOGS_DIR" && "$k" != "SGFLEET_BASE_URL" && "$k" != "SGFLEET_ENCRYPTION_KEY" && "$k" != "PROMETHEUS_HOST" ]]; then
+            echo "${k}=\"${existing_values[$k]}\""
+          fi
+        done
+      fi
 } > .env
 
 # Step 7: Generate models.json

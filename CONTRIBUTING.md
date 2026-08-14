@@ -7,7 +7,7 @@ git clone https://github.com/joesew/sgfleet.git
 cd sgfleet
 
 # Backend
-cd admin
+cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ruff check app/
@@ -31,7 +31,7 @@ Contributions that improve the existing single-node Docker + SGLang workflow —
 - Backend: `ruff check app/` and `python3 -m pytest tests/` pass
 - Frontend: `npm run lint` and `npx vitest run` pass
 - No untracked secrets in `.env` (already in `.gitignore`)
-- Run `cd admin && ./deploy.sh` locally to confirm the change deploys
+- Run `cd backend && ./deploy.sh` locally to confirm the change deploys
 
 ## Pull requests
 

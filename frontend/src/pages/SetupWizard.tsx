@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 
@@ -14,6 +14,24 @@ export default function SetupWizard() {
   const [error, setError] = useState('')
   const [resultKey, setResultKey] = useState('')
   const [keyCopied, setKeyCopied] = useState(false)
+
+  // If setup is already complete (e.g. user navigated here after finishing the
+  // wizard in another tab, or a stale AuthContext bounced them here), send
+  // them straight to the login page instead of showing the wizard.
+  useEffect(() => {
+    let cancelled = false
+    api.getSetupStatus()
+      .then((res) => {
+        if (!cancelled && res.setup_complete && !resultKey) {
+          navigate('/login', { replace: true })
+        }
+      })
+      .catch(() => { /* ignore — show wizard */ })
+    return () => { cancelled = true }
+    // Intentionally only run on mount; we don't want to redirect right after
+    // completing setup (resultKey guards that case).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const canNext = useCallback(() => {
     if (step === 1) return adminName.trim().length > 0

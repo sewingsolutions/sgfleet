@@ -198,7 +198,7 @@ app.include_router(metrics_api_router)
 prom_router = APIRouter()
 
 
-@prom_router.get("/admin/api/metrics")
+@prom_router.get("/api/metrics")
 def prometheus_metrics():
     body, content_type = prometheus_handler()
     return Response(content=body, media_type=content_type)
@@ -206,5 +206,4 @@ def prometheus_metrics():
 
 app.include_router(prom_router)
 
-# Admin UI routes (login, logout, SPA fallback) - includes metrics SPA page
 app.include_router(admin_ui_router)

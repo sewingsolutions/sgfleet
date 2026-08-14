@@ -7,7 +7,7 @@ from . import metrics as real_metrics
 from .admin_api import require_admin
 from .db import get_all_users, get_user_by_id, get_user_usage
 
-router = APIRouter(prefix="/admin/api")
+router = APIRouter(prefix="/api")
 
 
 def parse_time_range(range_str):

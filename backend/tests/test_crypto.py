@@ -7,7 +7,6 @@ from app.crypto import decrypt, encrypt
 
 
 class TestEncryptDecrypt:
-
     def test_roundtrip(self):
         ciphertext = encrypt("my-secret-value")
         assert ciphertext  # non-empty
