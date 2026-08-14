@@ -1,11 +1,18 @@
 import contextlib
 import os
+import sys
 import tempfile
 
 import pytest
 
 os.environ.setdefault("ADMIN_API_KEY", "test-secret-key-for-testing")
 os.environ.setdefault("SGFLEET_ENCRYPTION_KEY", "0" * 64)
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_sessionfinish(session, exitstatus):
+    """Force exit to prevent async event loop from hanging in CI."""
+    sys.exit(exitstatus)
 
 
 @pytest.fixture(autouse=True)
