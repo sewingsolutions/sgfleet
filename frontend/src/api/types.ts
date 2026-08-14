@@ -131,6 +131,8 @@ export interface Model {
   command_flags: string[]
   created_at: string
   pending_restart?: boolean
+  startup_error?: string | null
+  startup_error_at?: string | null
   status?: 'running' | 'stopped' | 'starting' | 'stopping' | 'error'
   health?: ModelHealth | null
   disk_bytes?: number | null
@@ -270,6 +272,7 @@ export type LogStreamEvent =
   | { type: 'line'; line: string }
   | { type: 'eof' }
   | { type: 'error'; message: string }
+  | { type: 'startup_error'; message: string; at?: string }
 
 export interface DockerImagesResponse {
   images: string[]

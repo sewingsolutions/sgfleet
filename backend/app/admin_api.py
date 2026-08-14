@@ -727,15 +727,24 @@ async def stream_model_logs(request: Request, model_id: str, tail: int = 500):
         raise HTTPException(status_code=404, detail="Model not found")
 
     container_name = m["container_name"]
-    from .docker_manager import ModelError, stream_container_logs
+    startup_error = m.get("startup_error")
+    startup_error_at = m.get("startup_error_at")
+    from .docker_manager import ModelError, read_persisted_logs, stream_container_logs
 
     async def event_generator():
+        # Send startup error first if present
+        if startup_error:
+            yield f"data: {json.dumps({'type': 'startup_error', 'message': startup_error, 'at': startup_error_at})}\n\n"
+
         try:
             async for line in stream_container_logs(container_name, tail):
                 yield f"data: {json.dumps({'type': 'line', 'line': line})}\n\n"
             yield f"data: {json.dumps({'type': 'eof'})}\n\n"
-        except ModelError as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        except ModelError:
+            # Container not found — fall back to persisted log file
+            async for line in read_persisted_logs(container_name, tail):
+                yield f"data: {json.dumps({'type': 'line', 'line': line})}\n\n"
+            yield f"data: {json.dumps({'type': 'eof'})}\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 WORKDIR /app
-RUN apt-get update && apt-get install -y curl docker.io && \
+RUN apt-get update && apt-get install -y curl docker.io logrotate && \
     mkdir -p /usr/lib/docker/cli-plugins && \
     curl -fsSL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
     -o /usr/lib/docker/cli-plugins/docker-compose && \

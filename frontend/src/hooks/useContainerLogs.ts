@@ -34,6 +34,8 @@ export function useContainerLogs(modelId: string, tail: number, active: boolean)
   const [lines, setLines] = useState<LogLine[]>([])
   const [status, setStatus] = useState<'connecting' | 'streaming' | 'ended' | 'error'>('connecting')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [startupError, setStartupError] = useState<string | null>(null)
+  const [startupErrorAt, setStartupErrorAt] = useState<string | null>(null)
   const [reconnectKey, setReconnectKey] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -48,6 +50,8 @@ export function useContainerLogs(modelId: string, tail: number, active: boolean)
 
     setLines([])
     setErrorMessage(null)
+    setStartupError(null)
+    setStartupErrorAt(null)
     setStatus('connecting')
 
     const abort = new AbortController()
@@ -107,6 +111,9 @@ export function useContainerLogs(modelId: string, tail: number, active: boolean)
                   setErrorMessage(event.message)
                   setStatus('error')
                   return
+                } else if (event.type === 'startup_error') {
+                  setStartupError(event.message)
+                  setStartupErrorAt(event.at ?? null)
                 }
               } catch { /* skip malformed events */ }
             }
@@ -135,5 +142,5 @@ export function useContainerLogs(modelId: string, tail: number, active: boolean)
     setReconnectKey((k) => k + 1)
   }, [])
 
-  return { lines, status, errorMessage, reconnect }
+  return { lines, status, errorMessage, startupError, startupErrorAt, reconnect }
 }

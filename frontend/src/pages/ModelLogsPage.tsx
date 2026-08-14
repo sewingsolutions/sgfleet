@@ -66,7 +66,7 @@ export default function ModelLogsPage() {
     enabled: !!modelId,
   })
 
-  const { lines, status, errorMessage, reconnect } = useContainerLogs(
+  const { lines, status, errorMessage, startupError, startupErrorAt, reconnect } = useContainerLogs(
     modelId || '',
     tail,
     autoRefresh,
@@ -95,6 +95,25 @@ export default function ModelLogsPage() {
   return (
     <div>
       <PageHeader modelName={model?.name || modelId} />
+
+      {startupError && (
+        <div className="mb-4 p-3 sm:p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
+          <div className="flex items-start gap-2">
+            <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-red-800 dark:text-red-200">Container failed to start</p>
+              <p className="mt-1 text-xs text-red-700 dark:text-red-300 font-mono break-all">{startupError}</p>
+              {startupErrorAt && (
+                <p className="mt-1 text-xs text-red-500 dark:text-red-400">
+                  {new Date(startupErrorAt).toLocaleString()}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-3 sm:p-4 mb-4">
         <div className="flex flex-wrap items-center gap-3">
@@ -162,7 +181,7 @@ export default function ModelLogsPage() {
         ref={scrollRef}
         onScroll={handleScroll}
         className="bg-gray-900 dark:bg-slate-950 rounded-lg border border-gray-200 dark:border-slate-700 p-3 sm:p-4 overflow-auto"
-        style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}
+        style={{ height: startupError ? 'calc(100vh - 360px)' : 'calc(100vh - 280px)', minHeight: '400px' }}
       >
         {lines.length === 0 ? (
           <div className="py-8 text-center text-gray-500 dark:text-gray-400">

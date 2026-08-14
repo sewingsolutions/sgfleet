@@ -171,6 +171,7 @@ async def init_db():
             (12, migrate_to_v12),
             (13, migrate_to_v13),
             (14, migrate_to_v14),
+            (15, migrate_to_v15),
         ]
         for target, fn in migrations:
             if current < target:
@@ -500,6 +501,36 @@ async def migrate_to_v14(db):
         await db.execute("INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)", ("setup_complete", "true"))
     await db.execute("UPDATE config SET value = ? WHERE key = ?", ("14", "migration_version"))
     await db.commit()
+
+
+async def migrate_to_v15(db):
+    """Add startup_error and startup_error_at columns to models table."""
+    with contextlib.suppress(Exception):
+        await db.execute("ALTER TABLE models ADD COLUMN startup_error TEXT DEFAULT NULL")
+    with contextlib.suppress(Exception):
+        await db.execute("ALTER TABLE models ADD COLUMN startup_error_at DATETIME DEFAULT NULL")
+    await db.execute("UPDATE config SET value = ? WHERE key = ?", ("15", "migration_version"))
+    await db.commit()
+
+
+async def save_startup_error(model_id: str, error: str) -> None:
+    """Store the last startup error for a model."""
+    async with get_db() as db:
+        await db.execute(
+            "UPDATE models SET startup_error = ?, startup_error_at = CURRENT_TIMESTAMP WHERE model_id = ?",
+            (error, model_id),
+        )
+        await db.commit()
+
+
+async def clear_startup_error(model_id: str) -> None:
+    """Clear the startup error for a model."""
+    async with get_db() as db:
+        await db.execute(
+            "UPDATE models SET startup_error = NULL, startup_error_at = NULL WHERE model_id = ?",
+            (model_id,),
+        )
+        await db.commit()
 
 
 def _get_seed_models() -> list[dict]:

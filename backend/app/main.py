@@ -32,6 +32,11 @@ async def lifespan(app: FastAPI):
     global _metrics_cleanup_task, _audit_cleanup_task
     await init_db()
 
+    # Rotate model container logs on startup
+    from .docker_manager import run_logrotate
+
+    asyncio.create_task(run_logrotate())
+
     from .db import is_setup_complete, load_admin_api_key
 
     setup_done = await is_setup_complete()

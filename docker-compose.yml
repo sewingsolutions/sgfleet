@@ -22,10 +22,13 @@ services:
       - switch_status:/opt/switch
       - ${MODELS_DIR:-YOUR_MODELS_PATH/vllm_models}:/models:ro
       - ${MODELS_DIR:-YOUR_MODELS_PATH/vllm_models}:/downloads
+      - ${LOGS_DIR:-./logs}:/logs
+      - ./telemetry/logrotate.conf:/etc/logrotate.d/sgfleet.conf:ro
     environment:
       - SGFLEET_ENCRYPTION_KEY=${SGFLEET_ENCRYPTION_KEY}
       - SGFLEET_BASE_URL=${SGFLEET_BASE_URL:-}
       - HOST_MODELS_DIR=${MODELS_DIR:-YOUR_MODELS_PATH/vllm_models}
+      - HOST_LOGS_DIR=${LOGS_DIR:-./logs}
 
   frontend:
     build: ./frontend

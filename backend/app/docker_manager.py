@@ -3,6 +3,7 @@ import contextlib
 import json
 import logging
 import os
+import shlex
 from pathlib import Path
 
 import httpx
@@ -17,6 +18,8 @@ SWITCH_DIR = os.environ.get("SWITCH_DIR", "/opt/switch")
 MODELS_DIR = os.environ.get("HOST_MODELS_DIR") or os.environ.get("MODELS_DIR", "YOUR_MODELS_PATH/vllm_models")
 CONTAINER_MODELS_DIR = "/models"
 CONTAINER_MODELS_DIR_RW = "/downloads"
+# Host-side path to model container logs (passed as env var, resolves correctly for docker run)
+HOST_LOGS_DIR = os.environ.get("HOST_LOGS_DIR", "/logs")
 
 ADMIN_SKIP = {"sgfleet-admin", "sgfleet-alloy", "sgfleet-nginx-exporter"}
 
@@ -126,11 +129,27 @@ def build_docker_run_cmd(model: dict, is_primary: bool = False) -> list[str]:
         cmd.extend(["-e", f"{key}={value}"])
 
     cmd.extend(["-v", f"{MODELS_DIR}:/models"])
-    cmd.append(image)
-    cmd.extend(["sglang", "serve", "--model-path", model_path, "--host", "0.0.0.0", "--port", str(port)])
+    # Mount logs directory for persistent tee'd logs
+    cmd.extend(["-v", f"{HOST_LOGS_DIR}:/logs"])
 
+    # Wrap sglang serve with tee to persist logs to host volume
+    # This ensures logs survive container removal (docker rm -f)
+    log_path = f"/logs/{container_name}.log"
+    # Build sglang args as a proper list to avoid shell injection
+    sglang_args = [
+        "sglang", "serve",
+        "--model-path", shlex.quote(model_path),
+        "--host", "0.0.0.0",
+        "--port", str(port),
+    ]
     if command_flags:
-        cmd.extend(command_flags)
+        sglang_args.extend(shlex.quote(f) for f in command_flags)
+    # pipefail ensures the exit code is sglang's, not tee's, so Docker
+    # restart policy triggers correctly when the model process crashes
+    tee_cmd = f"set -o pipefail; exec {' '.join(sglang_args)} 2>&1 | tee -a '{log_path}'"
+
+    cmd.append(image)
+    cmd.extend(["sh", "-c", tee_cmd])
 
     return cmd
 
@@ -144,8 +163,15 @@ async def start_model(model: dict, is_primary: bool = False) -> None:
     Raises ModelError if the container fails to start or the health check
     doesn't succeed within the timeout.
     """
+    from .db import clear_startup_error, save_startup_error
+
     container_name = model["container_name"]
+    model_id = model["model_id"]
     asyncio.create_task(_log_config_version(model))
+
+    # Clear previous startup error on new attempt
+    await clear_startup_error(model_id)
+
     try:
         status = await get_container_status(container_name)
         already_running = bool(status and status.get("state", "running") == "running")
@@ -156,7 +182,13 @@ async def start_model(model: dict, is_primary: bool = False) -> None:
         cmd = build_docker_run_cmd(model, is_primary)
         primary_label = " (primary)" if is_primary else ""
         logger.info("Starting model %s%s", container_name, primary_label)
-        await _run(cmd)
+        try:
+            await _run(cmd)
+        except ModelError as e:
+            error_msg = str(e)
+            logger.error("Failed to start container %s: %s", container_name, error_msg)
+            await save_startup_error(model_id, f"Container failed to start: {error_msg}")
+            raise
     else:
         logger.info("Container %s already running, skipping docker run", container_name)
         # Ensure primary alias is assigned to already-running containers
@@ -184,7 +216,13 @@ async def start_model(model: dict, is_primary: bool = False) -> None:
     # Wait for the model server to become reachable
     timeout = int(model.get("startup_timeout") or DEFAULT_STARTUP_TIMEOUT)
     endpoint = f"http://{container_name}:{model['port']}"
-    await _wait_for_endpoint(endpoint, timeout=timeout, label=container_name)
+    try:
+        await _wait_for_endpoint(endpoint, timeout=timeout, label=container_name)
+    except ModelError as e:
+        error_msg = str(e)
+        logger.error("Model %s health check failed: %s", container_name, error_msg)
+        await save_startup_error(model_id, f"Health check failed: {error_msg}")
+        raise
 
 
 async def _log_config_version(model: dict):
@@ -405,6 +443,61 @@ async def stream_container_logs(container_name: str, tail: int = 500):
         stderr_text = "".join(stderr_lines)
         if "No such container" in stderr_text or "not found" in stderr_text.lower():
             raise ModelError(f"Container '{container_name}' not found")
+
+
+async def read_persisted_logs(container_name: str, tail: int = 500):
+    """Read logs from the persisted log file on the host volume.
+
+    Returns an async generator that yields log lines.
+    Returns nothing if the log file doesn't exist.
+    """
+    log_file = f"/logs/{container_name}.log"
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "tail", "-n", str(tail), log_file,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        if proc.returncode != 0:
+            # File doesn't exist or can't be read
+            return
+
+        buffer = stdout.decode(errors="replace")
+        while "\n" in buffer:
+            line, buffer = buffer.split("\n", 1)
+            if line:
+                yield line
+        if buffer.strip():
+            yield buffer.strip()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logger.warning("Failed to read persisted logs for %s", container_name)
+
+
+async def run_logrotate() -> None:
+    """Rotate model container logs using logrotate.
+
+    Runs logrotate on the sgmfleet.conf config file to rotate any oversized
+    log files. Non-critical — errors are logged but not raised.
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "logrotate", "-s", "/tmp/logrotate.state", "/etc/logrotate.d/sgfleet.conf",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            err = stderr.decode(errors="replace").strip()
+            logger.warning("logrotate failed: %s", err)
+        else:
+            logger.info("logrotate completed successfully")
+    except FileNotFoundError:
+        logger.warning("logrotate not found, skipping log rotation")
+    except OSError as e:
+        logger.warning("Failed to run logrotate: %s", e)
 
 
 def _write_status(data: dict) -> None:

@@ -63,16 +63,23 @@ class TestBuildDockerRunCmd:
         assert "SYS_NICE" in cmd
         assert "--privileged" not in cmd
         assert model["image"] in cmd
-        assert "sglang" in cmd
-        assert "serve" in cmd
-        assert "--model-path" in cmd
-        assert model["model_path"] in cmd
-        assert "--host" in cmd
-        assert "0.0.0.0" in cmd
-        assert "--port" in cmd
-        assert str(model["port"]) in cmd
-        assert "--kv-cache-dtype" in cmd
-        assert "fp8_e4m3" in cmd
+        # Command is now wrapped with sh -c tee wrapper
+        assert "sh" in cmd
+        assert "-c" in cmd
+        # The tee wrapper should contain sglang serve
+        assert any("sglang" in str(x) for x in cmd)
+        assert any("serve" in str(x) for x in cmd)
+        assert any("--model-path" in str(x) for x in cmd)
+        assert any(model["model_path"] in str(x) for x in cmd)
+        assert any("--host" in str(x) for x in cmd)
+        assert any("0.0.0.0" in str(x) for x in cmd)
+        assert any("--port" in str(x) for x in cmd)
+        assert any(str(model["port"]) in str(x) for x in cmd)
+        assert any("--kv-cache-dtype" in str(x) for x in cmd)
+        assert any("fp8_e4m3" in str(x) for x in cmd)
+        # Logs volume mount
+        assert any("-v" in str(x) for x in cmd)
+        assert any("tee" in str(x) for x in cmd)
 
     def test_primary_alias(self):
         from app.docker_manager import build_docker_run_cmd
@@ -103,6 +110,22 @@ class TestBuildDockerRunCmd:
         assert e_count == 2
         for val in ["VAR1=val1", "VAR2=val2"]:
             assert val in cmd
+
+    def test_shell_injection_escaped(self):
+        from app.docker_manager import build_docker_run_cmd
+
+        model = _make_model(command_flags=['"; rm -rf /; #'])
+        cmd = build_docker_run_cmd(model)
+
+        # Find the -c argument (tee wrapper command)
+        c_idx = cmd.index("-c")
+        tee_cmd = cmd[c_idx + 1]
+
+        # The malicious string should be properly quoted by shlex.quote
+        # Verify it appears wrapped in single quotes (shlex.quote output)
+        assert "'\"; rm -rf /; #'" in tee_cmd
+        # Verify pipefail is set so sglang exit code propagates
+        assert tee_cmd.startswith("set -o pipefail;")
 
 
 class TestWriteStatus:
@@ -184,7 +207,18 @@ class TestStartModel:
         async def mock_wait(endpoint, timeout, label=""):
             return None
 
-        with patch("app.docker_manager._run", mock_run), patch("app.docker_manager._wait_for_endpoint", mock_wait):
+        async def mock_clear_error(model_id):
+            pass
+
+        async def mock_save_error(model_id, error):
+            pass
+
+        with (
+            patch("app.docker_manager._run", mock_run),
+            patch("app.docker_manager._wait_for_endpoint", mock_wait),
+            patch("app.db.clear_startup_error", mock_clear_error),
+            patch("app.db.save_startup_error", mock_save_error),
+        ):
             model = _make_model()
             await start_model(model)
 
@@ -200,9 +234,17 @@ class TestStartModel:
         async def mock_wait(endpoint, timeout, label=""):
             raise ModelError("timeout")
 
+        async def mock_clear_error(model_id):
+            pass
+
+        async def mock_save_error(model_id, error):
+            pass
+
         with (
             patch("app.docker_manager._run", mock_run),
             patch("app.docker_manager._wait_for_endpoint", mock_wait),
+            patch("app.db.clear_startup_error", mock_clear_error),
+            patch("app.db.save_startup_error", mock_save_error),
             pytest.raises(ModelError),
         ):
             await start_model(_make_model())
@@ -226,10 +268,18 @@ class TestEnsureModelsSync:
         async def mock_wait(endpoint, timeout, label=""):
             return None
 
+        async def mock_clear_error(model_id):
+            pass
+
+        async def mock_save_error(model_id, error):
+            pass
+
         with (
             patch("app.docker_manager.SWITCH_DIR", str(switch_dir)),
             patch("app.docker_manager._run", mock_run),
             patch("app.docker_manager._wait_for_endpoint", mock_wait),
+            patch("app.db.clear_startup_error", mock_clear_error),
+            patch("app.db.save_startup_error", mock_save_error),
         ):
             ready = await ensure_models_sync([active_model, inactive_model])
 
@@ -257,10 +307,18 @@ class TestEnsureModelsSync:
         async def mock_wait(endpoint, timeout, label=""):
             raise ModelError("timeout")
 
+        async def mock_clear_error(model_id):
+            pass
+
+        async def mock_save_error(model_id, error):
+            pass
+
         with (
             patch("app.docker_manager.SWITCH_DIR", str(switch_dir)),
             patch("app.docker_manager._run", mock_run),
             patch("app.docker_manager._wait_for_endpoint", mock_wait),
+            patch("app.db.clear_startup_error", mock_clear_error),
+            patch("app.db.save_startup_error", mock_save_error),
         ):
             ready = await ensure_models_sync([active_model])
 
