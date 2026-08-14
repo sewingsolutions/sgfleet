@@ -70,7 +70,7 @@ jobs:
 
       - name: Set up hadolint
         run: |
-          curl -fsSL https://raw.githubusercontent.com/hadolint/hadolint/master/install.sh | sh
+          curl -fsSL https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint && chmod +x /usr/local/bin/hadolint
 
       - name: Lint backend Dockerfile
         run: hadolint backend/Dockerfile
