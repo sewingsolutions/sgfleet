@@ -21,7 +21,13 @@ CONTAINER_MODELS_DIR_RW = "/downloads"
 # Host-side path to model container logs (passed as env var, resolves correctly for docker run)
 HOST_LOGS_DIR = os.environ.get("HOST_LOGS_DIR", "/logs")
 
-ADMIN_SKIP = {"sgfleet-admin", "sgfleet-alloy", "sgfleet-nginx-exporter"}
+ADMIN_SKIP = {
+    "sgfleet-backend",
+    "sgfleet-frontend",
+    "sgfleet-admin",
+    "sgfleet-alloy",
+    "sgfleet-nginx-exporter",
+}
 
 
 class ModelError(Exception):
@@ -137,10 +143,14 @@ def build_docker_run_cmd(model: dict, is_primary: bool = False) -> list[str]:
     log_path = f"/logs/{container_name}.log"
     # Build sglang args as a proper list to avoid shell injection
     sglang_args = [
-        "sglang", "serve",
-        "--model-path", shlex.quote(model_path),
-        "--host", "0.0.0.0",
-        "--port", str(port),
+        "sglang",
+        "serve",
+        "--model-path",
+        shlex.quote(model_path),
+        "--host",
+        "0.0.0.0",
+        "--port",
+        str(port),
     ]
     if command_flags:
         sglang_args.extend(shlex.quote(f) for f in command_flags)
@@ -454,7 +464,10 @@ async def read_persisted_logs(container_name: str, tail: int = 500):
     log_file = f"/logs/{container_name}.log"
     try:
         proc = await asyncio.create_subprocess_exec(
-            "tail", "-n", str(tail), log_file,
+            "tail",
+            "-n",
+            str(tail),
+            log_file,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -484,7 +497,10 @@ async def run_logrotate() -> None:
     """
     try:
         proc = await asyncio.create_subprocess_exec(
-            "logrotate", "-s", "/tmp/logrotate.state", "/etc/logrotate.d/sgfleet.conf",
+            "logrotate",
+            "-s",
+            "/tmp/logrotate.state",
+            "/etc/logrotate.d/sgfleet.conf",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
