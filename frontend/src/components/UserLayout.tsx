@@ -5,7 +5,6 @@ import { useTheme } from '../context/ThemeContext'
 import { api } from '../api/client'
 
 const links = [
-  { to: '/user/', label: 'Dashboard' },
   { to: '/user/models', label: 'Models' },
   { to: '/user/config', label: 'Config' },
   { to: '/user/metrics', label: 'Metrics' },

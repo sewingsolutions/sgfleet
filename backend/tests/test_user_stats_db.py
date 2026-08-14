@@ -1,4 +1,5 @@
 import os
+from typing import cast
 
 os.environ.setdefault("ADMIN_API_KEY", "test-secret-key-for-testing")
 
@@ -17,8 +18,7 @@ from app.db import (
 @pytest.mark.asyncio
 async def test_get_user_total_today_empty():
     await create_user("today_user", "sk-today")
-    user = await get_user_by_name("today_user")
-    uid = user["id"]
+    uid = cast(dict, await get_user_by_name("today_user"))["id"]
 
     count = await get_user_total_today(uid)
     assert count == 0
@@ -27,8 +27,7 @@ async def test_get_user_total_today_empty():
 @pytest.mark.asyncio
 async def test_get_user_total_today_with_data():
     await create_user("today_data_user", "sk-today-data")
-    user = await get_user_by_name("today_data_user")
-    uid = user["id"]
+    uid = cast(dict, await get_user_by_name("today_data_user"))["id"]
 
     from datetime import UTC, datetime
 
@@ -51,8 +50,7 @@ async def test_get_user_total_today_with_data():
 @pytest.mark.asyncio
 async def test_get_user_summary_empty():
     await create_user("summary_user", "sk-summary")
-    user = await get_user_by_name("summary_user")
-    uid = user["id"]
+    uid = cast(dict, await get_user_by_name("summary_user"))["id"]
 
     summary = await get_user_summary(uid)
     assert summary["total_requests"] == 0
@@ -65,8 +63,7 @@ async def test_get_user_summary_empty():
 @pytest.mark.asyncio
 async def test_get_user_summary_with_data():
     await create_user("summary_data_user", "sk-summary-data")
-    user = await get_user_by_name("summary_data_user")
-    uid = user["id"]
+    uid = cast(dict, await get_user_by_name("summary_data_user"))["id"]
 
     import app.db
 
@@ -88,8 +85,7 @@ async def test_get_user_summary_with_data():
 @pytest.mark.asyncio
 async def test_get_user_usage_empty():
     await create_user("usage_user", "sk-usage")
-    user = await get_user_by_name("usage_user")
-    uid = user["id"]
+    uid = cast(dict, await get_user_by_name("usage_user"))["id"]
 
     rows = await get_user_usage(uid)
     assert rows == []
@@ -98,8 +94,7 @@ async def test_get_user_usage_empty():
 @pytest.mark.asyncio
 async def test_get_user_usage_with_since():
     await create_user("usage_since_user", "sk-usage-since")
-    user = await get_user_by_name("usage_since_user")
-    uid = user["id"]
+    uid = cast(dict, await get_user_by_name("usage_since_user"))["id"]
 
     import app.db
 

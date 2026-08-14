@@ -38,6 +38,8 @@ Contributions that improve the existing single-node Docker + SGLang workflow —
 - Branch from `master`, small focused changes
 - Include tests for new behavior
 - Reference any related issue in the description
+- Name your branch clearly with a prefix, e.g. `[feat|fix|bug|chore|docs|refactor|test|ci]-short-description`
+- start the title with the type of change (feat, fix, chore, etc.) and a short description of the change
 
 ## Questions or issues
 

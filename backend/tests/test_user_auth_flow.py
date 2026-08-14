@@ -1,4 +1,5 @@
 import os
+from typing import cast
 
 os.environ.setdefault("ADMIN_API_KEY", "test-secret-key-for-testing")
 
@@ -70,22 +71,21 @@ async def test_require_user_valid_cookie():
     await mark_setup_complete()
     user = await get_user_by_name("require_user_test")
 
-    token = create_user_session_token(user["id"], "sk-require-test")
+    token = create_user_session_token(cast(dict, user)["id"], "sk-require-test")
 
-    class MockState:
-        pass
+    mock_state = cast(dict, {"user": None})
 
-    class MockRequest:
+    class MockRequest:  # type: ignore
         cookies = {_USER_COOKIE_NAME: token}
         headers = {}
-        state = MockState()
+        state = type("State", (), mock_state)()
         method = "GET"
         url = type("URL", (), {"path": "/test"})()
         client = type("Client", (), {"host": "127.0.0.1"})()
 
-    await require_user(MockRequest())
-    assert hasattr(MockRequest.state, "user")
-    assert MockRequest.state.user["name"] == "require_user_test"
+    await require_user(MockRequest())  # type: ignore[arg-type]
+    assert mock_state["user"] is not None
+    assert mock_state["user"]["name"] == "require_user_test"
 
 
 @pytest.mark.asyncio
@@ -95,7 +95,7 @@ async def test_require_user_missing_cookie_raises():
 
     await mark_setup_complete()
 
-    class MockRequest:
+    class MockReq2:  # type: ignore
         cookies = {}
         headers = {}
         state = type("State", (), {})()
@@ -104,7 +104,7 @@ async def test_require_user_missing_cookie_raises():
         client = type("Client", (), {"host": "127.0.0.1"})()
 
     with pytest.raises(HTTPException, match="Missing or invalid"):
-        await require_user(MockRequest())
+        await require_user(MockReq2())  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
@@ -114,7 +114,7 @@ async def test_require_user_invalid_token_raises():
 
     await mark_setup_complete()
 
-    class MockRequest:
+    class MockReq3:  # type: ignore
         cookies = {_USER_COOKIE_NAME: "definitely-not-a-jwt"}
         headers = {}
         state = type("State", (), {})()
@@ -123,7 +123,7 @@ async def test_require_user_invalid_token_raises():
         client = type("Client", (), {"host": "127.0.0.1"})()
 
     with pytest.raises(HTTPException, match="Invalid user session"):
-        await require_user(MockRequest())
+        await require_user(MockReq3())  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
@@ -134,20 +134,20 @@ async def test_require_user_inactive_user_raises():
     await create_user("inactive_user_test", "sk-inactive")
     await mark_setup_complete()
     user = await get_user_by_name("inactive_user_test")
-    await soft_delete(user["id"])
+    uid = cast(dict, user)["id"]
+    await soft_delete(uid)
 
-    token = create_user_session_token(user["id"], "sk-inactive")
+    token = create_user_session_token(uid, "sk-inactive")
 
-    class MockState:
-        pass
+    mock_state_inactive = cast(dict, {"user": None})
 
-    class MockRequest:
+    class MockRequestInactive:  # type: ignore
         cookies = {_USER_COOKIE_NAME: token}
         headers = {}
-        state = MockState()
+        state = type("State", (), mock_state_inactive)()
         method = "GET"
         url = type("URL", (), {"path": "/test"})()
         client = type("Client", (), {"host": "127.0.0.1"})()
 
     with pytest.raises(HTTPException, match="User not found or inactive"):
-        await require_user(MockRequest())
+        await require_user(MockRequestInactive())  # type: ignore[arg-type]

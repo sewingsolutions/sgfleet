@@ -1,4 +1,5 @@
 import os
+from typing import cast
 
 os.environ.setdefault("ADMIN_API_KEY", "test-secret-key-for-testing")
 
@@ -9,8 +10,7 @@ from app.db import count_user_requests, create_user, get_user_by_name, get_user_
 @pytest.mark.asyncio
 async def test_get_user_requests_empty():
     await create_user("empty_requests_user", "sk-empty-req")
-    user = await get_user_by_name("empty_requests_user")
-    uid = user["id"]
+    uid = cast(dict, await get_user_by_name("empty_requests_user"))["id"]
 
     requests = await get_user_requests(uid)
     assert requests == []
@@ -19,8 +19,7 @@ async def test_get_user_requests_empty():
 @pytest.mark.asyncio
 async def test_count_user_requests_empty():
     await create_user("empty_count_user", "sk-empty-count")
-    user = await get_user_by_name("empty_count_user")
-    uid = user["id"]
+    uid = cast(dict, await get_user_by_name("empty_count_user"))["id"]
 
     count = await count_user_requests(uid)
     assert count == 0
@@ -29,8 +28,7 @@ async def test_count_user_requests_empty():
 @pytest.mark.asyncio
 async def test_get_user_requests_pagination():
     await create_user("paginated_user", "sk-paginated")
-    user = await get_user_by_name("paginated_user")
-    uid = user["id"]
+    uid = cast(dict, await get_user_by_name("paginated_user"))["id"]
 
     import app.db
 
@@ -59,8 +57,7 @@ async def test_get_user_requests_pagination():
 @pytest.mark.asyncio
 async def test_get_user_requests_returns_correct_fields():
     await create_user("fields_user", "sk-fields")
-    user = await get_user_by_name("fields_user")
-    uid = user["id"]
+    uid = cast(dict, await get_user_by_name("fields_user"))["id"]
 
     import app.db
 
@@ -88,8 +85,7 @@ async def test_get_user_requests_returns_correct_fields():
 @pytest.mark.asyncio
 async def test_get_user_requests_ordered_desc():
     await create_user("order_user", "sk-order")
-    user = await get_user_by_name("order_user")
-    uid = user["id"]
+    uid = cast(dict, await get_user_by_name("order_user"))["id"]
 
     import app.db
 
@@ -123,8 +119,7 @@ async def test_get_user_requests_nonexistent_user():
 @pytest.mark.asyncio
 async def test_get_user_requests_coalesce_null_tokens():
     await create_user("null_tokens_user", "sk-null-tokens")
-    user = await get_user_by_name("null_tokens_user")
-    uid = user["id"]
+    uid = cast(dict, await get_user_by_name("null_tokens_user"))["id"]
 
     import app.db
 
