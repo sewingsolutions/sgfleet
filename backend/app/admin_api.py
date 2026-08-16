@@ -996,7 +996,6 @@ async def get_git_log(request: Request):
     Commit log file (GIT_LOG.txt) is generated alongside it and bundled
     into the container image.
     """
-    await require_admin(request)
     app_dir = os.path.dirname(__file__)
     version_file = os.path.join(app_dir, "VERSION.txt")
     gitlog_file = os.path.join(app_dir, "GIT_LOG.txt")

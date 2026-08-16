@@ -2,7 +2,7 @@ import os
 
 os.environ.setdefault("ADMIN_API_KEY", "test-secret-key-for-testing")
 
-from app.token_parser import extract_usage_from_body
+from app.token_parser import extract_usage_from_body, extract_usage_from_sse
 
 
 def test_valid_full_usage_bytes():
@@ -51,3 +51,38 @@ def test_string_input():
 def test_unicode_decode_error():
     result = extract_usage_from_body(b"\xff\xfe")
     assert result == {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+
+def test_sse_usage_in_final_chunk():
+    body = b'data: {"choices": [{"delta": {"content": "hello"}}]}\n\ndata: {"usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}}\n\n'
+    result = extract_usage_from_sse(body)
+    assert result == {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30}
+
+
+def test_sse_no_usage():
+    body = b'data: {"choices": [{"delta": {"content": "hello"}}]}\n\n'
+    result = extract_usage_from_sse(body)
+    assert result == {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+
+def test_sse_empty_body():
+    result = extract_usage_from_sse(b"")
+    assert result == {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+
+def test_sse_string_input():
+    body = 'data: {"usage": {"prompt_tokens": 5, "completion_tokens": 15, "total_tokens": 20}}\n\n'
+    result = extract_usage_from_sse(body)
+    assert result == {"prompt_tokens": 5, "completion_tokens": 15, "total_tokens": 20}
+
+
+def test_sse_multiple_data_lines():
+    body = b'data: {"choices": [{"delta": {"content": "hi"}}]}\n\ndata: {"usage": {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7}}\n\ndata: [DONE]\n\n'
+    result = extract_usage_from_sse(body)
+    assert result == {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7}
+
+
+def test_sse_malformed_json_skipped():
+    body = b'data: {invalid}\n\ndata: {"usage": {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}}\n\n'
+    result = extract_usage_from_sse(body)
+    assert result == {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}

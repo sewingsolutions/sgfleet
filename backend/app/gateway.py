@@ -30,7 +30,7 @@ from .prometheus_metrics import (
     total_requests,
     upstream_status,
 )
-from .token_parser import extract_usage_from_body
+from .token_parser import extract_usage_from_body, extract_usage_from_sse
 
 _gateway_logger = logging.getLogger("sgfleet-admin")
 
@@ -410,10 +410,12 @@ async def proxy_request(request: Request):
 
                     prompt_tok = 0
                     completion_tok = 0
-                    if "text/event-stream" not in upstream_content_type[0]:
+                    if "text/event-stream" in upstream_content_type[0]:
+                        usage_data = extract_usage_from_sse(bytes(full_body))
+                    else:
                         usage_data = extract_usage_from_body(bytes(full_body))
-                        prompt_tok = usage_data["prompt_tokens"]
-                        completion_tok = usage_data["completion_tokens"]
+                    prompt_tok = usage_data["prompt_tokens"]
+                    completion_tok = usage_data["completion_tokens"]
                     await upsert_usage(user["id"], user.get("request_cost", 0.001), prompt_tok, completion_tok)
                 asyncio.create_task(
                     audit_log.log_request(
