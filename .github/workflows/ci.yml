@@ -8,6 +8,7 @@ on:
 
 jobs:
   backend-lint:
+    name: Backend lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +21,7 @@ jobs:
         working-directory: backend
 
   backend-format:
+    name: Backend format check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +34,7 @@ jobs:
         working-directory: backend
 
   backend-tests:
+    name: Backend tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -45,6 +48,7 @@ jobs:
         working-directory: backend
 
   frontend-lint:
+    name: Frontend lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +61,7 @@ jobs:
         working-directory: frontend
 
   frontend-tests:
+    name: Frontend tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,6 +74,7 @@ jobs:
         working-directory: frontend
 
   frontend-build:
+    name: Frontend build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -80,16 +86,26 @@ jobs:
       - run: npm run build
         working-directory: frontend
 
-  dockerfile-lint:
+  dockerfile-lint-backend:
+    name: Lint backend Dockerfile
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: |
           curl -fsSL https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint && chmod +x /usr/local/bin/hadolint
       - run: hadolint backend/Dockerfile
+
+  dockerfile-lint-frontend:
+    name: Lint frontend Dockerfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          curl -fsSL https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint && chmod +x /usr/local/bin/hadolint
       - run: hadolint frontend/Dockerfile
 
   docker-compose:
+    name: Docker Compose config validation
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
