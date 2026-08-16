@@ -10,15 +10,7 @@ import { copyToClipboard } from '../../utils/copyToClipboard'
 import { useWebhooks, useCreateWebhookMutation, useDeleteWebhookMutation } from '../../hooks/useWebhooks'
 import { useBaseUrl, useSetBaseUrlMutation } from '../../hooks/useBaseUrl'
 import { useHFToken, useSetHFTokenMutation } from '../../hooks/useHFToken'
-
-const formatUptime = (s: number) => {
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
-  if (h > 0) return `${h}h ${m}m`
-  if (m > 0) return `${m}m ${sec}s`
-  return `${sec}s`
-}
+import { exportUsersFile, importUsersFromJson, exportDatabase, rotateAdminKey, formatUptime } from '../../services/settingsActions'
 
 export default function SettingsPage() {
   const { logout } = useAuth()
@@ -57,24 +49,14 @@ export default function SettingsPage() {
   }, [updateDefaults])
 
   const handleExportUsers = async () => {
-    const res = await fetch('/api/users', { credentials: 'same-origin' })
-    const users = await res.json()
-    const blob = new Blob([JSON.stringify(users, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'users-export.json'
-    a.click()
-    URL.revokeObjectURL(url)
+    await exportUsersFile()
   }
 
   const handleImportUsers = async () => {
     setImportResult(null)
     setImportLoading(true)
     try {
-      const parsed = JSON.parse(importJson)
-      const res = await api.fetchPost('/api/settings/import_users', parsed)
-      setImportResult(res as { created: string[]; skipped: string[] })
+      setImportResult(await importUsersFromJson(importJson))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setImportResult({ created: [], skipped: [`Error: ${msg}`] })
@@ -85,8 +67,7 @@ export default function SettingsPage() {
 
   const handleExportDb = async () => {
     try {
-      const res = await api.fetchPost('/api/settings/export_db', {})
-      setExportJson(String(res.json))
+      setExportJson(await exportDatabase())
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       showToast(`Export failed: ${msg}`)
@@ -96,8 +77,8 @@ export default function SettingsPage() {
   const handleRotateAdminKey = async () => {
     if (!await confirmAction('Rotate admin key? The CURRENT key will be invalidated immediately. Make sure to copy the new key!', true)) return
     try {
-      const res = await api.fetchPost('/api/settings/rotate_admin_key', {})
-      setNewAdminKey(String(res.new_key))
+      const res = await rotateAdminKey()
+      setNewAdminKey(res.newKey)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       showToast(`Rotation failed: ${msg}`)

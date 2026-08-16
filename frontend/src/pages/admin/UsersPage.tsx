@@ -7,6 +7,7 @@ import AddUserForm from '../../components/AddUserForm'
 import UserCard from '../../components/UserCard'
 import { api } from '../../api/client'
 import type { Model } from '../../api/types'
+import { buildModelAccessMap, buildDefaultModelMap } from '../../services/userAccess'
 
 type UserFilter = 'all' | 'active' | 'inactive' | 'quota_exceeded'
 
@@ -56,29 +57,8 @@ export default function UsersPage() {
     })),
   })
 
-  // Build maps from query results
-  const modelAccessMap: Record<number, Model[]> = {}
-  userQueries.forEach((q) => {
-    if (q.data) {
-      modelAccessMap[q.data.userId] = q.data.access
-    } else if (q.isError) {
-      // Find the user by query index
-      const index = userQueries.indexOf(q)
-      const user = users[index]
-      if (user) modelAccessMap[user.id] = []
-    }
-  })
-
-  const defaultModelMap: Record<number, Model | null> = {}
-  defaultModelQueries.forEach((q) => {
-    if (q.data) {
-      defaultModelMap[q.data.userId] = q.data.model
-    } else if (q.isError) {
-      const index = defaultModelQueries.indexOf(q)
-      const user = users[index]
-      if (user) defaultModelMap[user.id] = null
-    }
-  })
+  const modelAccessMap = buildModelAccessMap(users, userQueries)
+  const defaultModelMap = buildDefaultModelMap(users, defaultModelQueries)
 
   const filtered = users.filter((u) => {
     if (search && !u.name.toLowerCase().includes(search.toLowerCase())) return false

@@ -252,6 +252,7 @@ export interface SSEEvent {
   message?: string
   model_id?: string
   target_dir?: string
+  progress?: number
 }
 
 export interface DownloadJob {

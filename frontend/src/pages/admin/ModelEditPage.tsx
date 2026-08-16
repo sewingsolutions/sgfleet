@@ -5,7 +5,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../../api/client'
 import type { Model, LocalModel, DockerImagesResponse } from '../../api/types'
 import { useToast } from '../../hooks/useToast'
-import { parseFlags, serializeFlags, type EnvVar, type FlagPair } from '../../utils/flags'
+import { buildModelPayload } from '../../services/modelActions'
+import { parseFlags, type EnvVar, type FlagPair } from '../../utils/flags'
 import { SGLANG_FLAGS, SGLANG_FLAG_CATEGORIES, CONTEXT_LENGTH_PRESETS, MAX_OUTPUT_LENGTH_PRESETS } from '../../utils/sglangFlags'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -201,21 +202,12 @@ function useModelForm(model: Model | null) {
   const [saving, setSaving] = useState(false)
 
   const buildPayload = useCallback(() => {
-    const envObj: Record<string, string> = {}
-    envVars.forEach((ev) => { if (ev.key.trim()) envObj[ev.key.trim()] = ev.value })
-    return {
-      model_id: modelId, name, image, model_path: modelPath,
-      context_length: contextLength ? parseInt(contextLength) : undefined,
-      max_output_length: maxOutputLength ? parseInt(maxOutputLength) : undefined,
-      port: port ? parseInt(port) : 30000,
-      container_name: containerName.trim() || `sgfleet-${modelId}`,
-      container_alias: containerAlias.trim() || `sgfleet-${modelId}`,
-      model_alias: modelAlias,
-      grace_period: gracePeriod ? parseInt(gracePeriod) : 10,
-      gpu: gpu === 'auto' ? null : gpu,
-      environment: envObj,
-      command_flags: serializeFlags(commandFlags),
-    }
+    return buildModelPayload({
+      modelId, name, image, modelPath,
+      contextLength, maxOutputLength, port,
+      containerName, containerAlias, modelAlias,
+      gracePeriod, gpu, envVars, commandFlags,
+    })
   }, [modelId, name, image, modelPath, contextLength, maxOutputLength, port, containerName, containerAlias, modelAlias, gracePeriod, gpu, envVars, commandFlags])
 
   return {

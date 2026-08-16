@@ -6,6 +6,8 @@ import { api } from '../../api/client'
 import type { Model, User, ModelHealth } from '../../api/types'
 import { useToast } from '../../hooks/useToast'
 import { useConfirm } from '../../hooks/useConfirm'
+import { formatTestResult } from '../../services/modelActions'
+import { downloadJson, normalizeImportJson } from '../../services/importExport'
 
 const statusColor = (s?: string) => {
   if (s === 'running') return 'bg-emerald-500'
@@ -167,13 +169,7 @@ export default function ModelsPage() {
 
   const handleExport = async () => {
     const r = await api.exportModels()
-    const blob = new Blob([r.json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'models.json'
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadJson(r.json, 'models.json')
     showToast('Models exported')
   }
 
@@ -186,14 +182,7 @@ export default function ModelsPage() {
   }
 
   const handleExportSingle = (m: Model) => {
-    const json = JSON.stringify({ models: [m] }, null, 2)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${m.model_id}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadJson(JSON.stringify({ models: [m] }, null, 2), `${m.model_id}.json`)
     showToast(`Exported ${m.name}`)
   }
 
@@ -202,12 +191,7 @@ export default function ModelsPage() {
     if (!file) return
     const text = await file.text()
     try {
-      const parsed = JSON.parse(text)
-      const json = Array.isArray(parsed)
-        ? JSON.stringify({ models: parsed })
-        : parsed.models
-          ? text
-          : JSON.stringify({ models: [parsed] })
+      const json = normalizeImportJson(text)
       await importModels(json)
       showToast(`Imported model for ${m.name}`)
     } catch (err) {
@@ -307,20 +291,10 @@ export default function ModelsPage() {
     try {
       const r = await api.testModel(m.model_id)
       const elapsedMs = r.latency_ms ?? Date.now() - t0
-      if (r.success) {
-        const usage = r.usage ? ` · ${r.usage.prompt_tokens ?? '?'}→${r.usage.completion_tokens ?? '?'} tok` : ''
-        const finish = r.finish_reason ? ` · finish=${r.finish_reason}` : ''
-        const header = `${r.model || m.model_id} · ${elapsedMs}ms${usage}${finish}`
-        setTestOutput((p) => ({
-          ...p,
-          [m.model_id]: { ok: true, text: `${header}\n\n${r.content || '(empty response)'}` },
-        }))
-      } else {
-        setTestOutput((p) => ({
-          ...p,
-          [m.model_id]: { ok: false, text: `HTTP ${r.status_code ?? '?'} — ${r.error || 'unknown error'}` },
-        }))
-      }
+      setTestOutput((p) => ({
+        ...p,
+        [m.model_id]: formatTestResult(r, m.model_id, elapsedMs),
+      }))
     } catch (e) {
       setTestOutput((p) => ({ ...p, [m.model_id]: { ok: false, text: `Error: ${(e as Error).message}` } }))
     }
