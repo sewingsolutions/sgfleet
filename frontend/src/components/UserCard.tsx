@@ -1,24 +1,24 @@
-import { useMemo, useState } from 'react'
-import { ChevronDown, Check, Pencil, Settings, EyeOff, PlayCircle, RefreshCw, Trash2 } from 'lucide-react'
-import { useUpdateUserMutation, useRotateKeyMutation, useDeleteUserMutation } from '../hooks/useUsers'
-import { useToast } from '../hooks/useToast'
-import { useConfirm } from '../hooks/useConfirm'
-import ConfigModal from './ConfigModal'
-import { copyToClipboard } from '../utils/copyToClipboard'
-import { tools } from '../config/tools'
-import type { User, Model } from '../api/types'
+import { useMemo, useState } from "react";
+import { ChevronDown, Check, Pencil, Settings, EyeOff, PlayCircle, RefreshCw, Trash2 } from "lucide-react";
+import { useUpdateUserMutation, useRotateKeyMutation, useDeleteUserMutation } from "../hooks/useUsers";
+import { useToast } from "../hooks/useToast";
+import { useConfirm } from "../hooks/useConfirm";
+import ConfigModal from "./ConfigModal";
+import { copyToClipboard } from "../utils/copyToClipboard";
+import { tools } from "../config/tools";
+import type { User, Model } from "../api/types";
 
 function fmt(n: number | null | undefined) {
-  if (n == null || n === 0) return '0'
-  const abs = Math.abs(n)
-  if (abs >= 1_000_000) return (n / 1_000_000).toFixed(abs % 1_000_000 === 0 ? 0 : 1) + 'M'
-  if (abs >= 1_000) return (n / 1_000).toFixed(abs % 1_000 === 0 ? 0 : 1) + 'k'
-  return n.toLocaleString()
+  if (n == null || n === 0) return "0";
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return (n / 1_000_000).toFixed(abs % 1_000_000 === 0 ? 0 : 1) + "M";
+  if (abs >= 1_000) return (n / 1_000).toFixed(abs % 1_000 === 0 ? 0 : 1) + "k";
+  return n.toLocaleString();
 }
 
 function ConfigDropdown({ selectedToolId, onSelect }: { selectedToolId: string; onSelect: (toolId: string) => void }) {
-  const [open, setOpen] = useState(false)
-  const selected = tools.find(t => t.id === selectedToolId)
+  const [open, setOpen] = useState(false);
+  const selected = tools.find((t) => t.id === selectedToolId);
   return (
     <div className="relative">
       <button
@@ -26,18 +26,21 @@ function ConfigDropdown({ selectedToolId, onSelect }: { selectedToolId: string; 
         className="flex items-center gap-1.5 px-3 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
       >
         <Settings className="w-3.5 h-3.5" />
-        {selected?.name || 'Config'}
+        {selected?.name || "Config"}
         <ChevronDown className="w-3 h-3" />
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute left-0 bottom-full mb-1 z-20 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-lg overflow-hidden">
-            {tools.map(t => (
+            {tools.map((t) => (
               <button
                 key={t.id}
-                onClick={() => { setOpen(false); onSelect(t.id); }}
-                className={`w-full text-left px-3 py-2 text-xs transition hover:bg-gray-100 dark:hover:bg-slate-700 ${t.id === selectedToolId ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300'}`}
+                onClick={() => {
+                  setOpen(false);
+                  onSelect(t.id);
+                }}
+                className={`w-full text-left px-3 py-2 text-xs transition hover:bg-gray-100 dark:hover:bg-slate-700 ${t.id === selectedToolId ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300" : "text-gray-700 dark:text-gray-300"}`}
               >
                 {t.name}
               </button>
@@ -46,48 +49,56 @@ function ConfigDropdown({ selectedToolId, onSelect }: { selectedToolId: string; 
         </>
       )}
     </div>
-  )
+  );
 }
 
 interface UserCardProps {
-  user: User
-  checked?: boolean
-  onToggleCheck?: () => void
-  modelAccess?: Model[]
-  defaultModel?: Model | null
-  allModels?: Model[]
-  onDefaultModelChange?: (modelId: string | null) => void
+  user: User;
+  checked?: boolean;
+  onToggleCheck?: () => void;
+  modelAccess?: Model[];
+  defaultModel?: Model | null;
+  allModels?: Model[];
+  onDefaultModelChange?: (modelId: string | null) => void;
 }
 
 interface Draft {
-  name: string
-  rate_limit: number
-  max_concurrent: number
-  request_cost: number
-  daily_quota: string
-  email: string
-  notes: string
-  default_model_id: string
+  name: string;
+  rate_limit: number;
+  max_concurrent: number;
+  request_cost: number;
+  daily_quota: string;
+  email: string;
+  notes: string;
+  default_model_id: string;
 }
 
-export default function UserCard({ user: initialUser, checked, onToggleCheck, modelAccess, defaultModel, allModels, onDefaultModelChange }: UserCardProps) {
-  const [user, setUser] = useState<User>(initialUser)
-  const [expanded, setExpanded] = useState(false)
-  const [showKey, setShowKey] = useState('')
-  const [showConfigModal, setShowConfigModal] = useState(false)
-  const [configToolId, setConfigToolId] = useState('opencode')
-  const [saving, setSaving] = useState(false)
-  const [draft, setDraft] = useState<Draft | null>(null)
-  const showToast = useToast()
-  const confirmAction = useConfirm()
-  const { mutateAsync: updateUser } = useUpdateUserMutation()
-  const { mutateAsync: rotateKey } = useRotateKeyMutation()
-  const { mutateAsync: deleteUser } = useDeleteUserMutation()
+export default function UserCard({
+  user: initialUser,
+  checked,
+  onToggleCheck,
+  modelAccess,
+  defaultModel,
+  allModels,
+  onDefaultModelChange,
+}: UserCardProps) {
+  const [user, setUser] = useState<User>(initialUser);
+  const [expanded, setExpanded] = useState(false);
+  const [showKey, setShowKey] = useState("");
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [configToolId, setConfigToolId] = useState("opencode");
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const showToast = useToast();
+  const confirmAction = useConfirm();
+  const { mutateAsync: updateUser } = useUpdateUserMutation();
+  const { mutateAsync: rotateKey } = useRotateKeyMutation();
+  const { mutateAsync: deleteUser } = useDeleteUserMutation();
 
   const userWithFreshStats = useMemo(
     () => ({ ...user, today_requests: initialUser.today_requests }),
     [user, initialUser.today_requests],
-  )
+  );
 
   const openEdit = () => {
     setDraft({
@@ -95,91 +106,83 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
       rate_limit: user.rate_limit,
       max_concurrent: user.max_concurrent,
       request_cost: user.request_cost ?? 0.001,
-      daily_quota: user.daily_quota?.toString() ?? '',
-      email: user.email ?? '',
-      notes: user.notes ?? '',
-      default_model_id: defaultModel?.model_id ?? '',
-    })
-    setExpanded(true)
-  }
+      daily_quota: user.daily_quota?.toString() ?? "",
+      email: user.email ?? "",
+      notes: user.notes ?? "",
+      default_model_id: defaultModel?.model_id ?? "",
+    });
+    setExpanded(true);
+  };
 
   const ensureDraft = () => {
-    if (draft) return draft
+    if (draft) return draft;
     const initial: Draft = {
       name: user.name,
       rate_limit: user.rate_limit,
       max_concurrent: user.max_concurrent,
       request_cost: user.request_cost ?? 0.001,
-      daily_quota: user.daily_quota?.toString() ?? '',
-      email: user.email ?? '',
-      notes: user.notes ?? '',
-      default_model_id: defaultModel?.model_id ?? '',
-    }
-    setDraft(initial)
-    return initial
-  }
+      daily_quota: user.daily_quota?.toString() ?? "",
+      email: user.email ?? "",
+      notes: user.notes ?? "",
+      default_model_id: defaultModel?.model_id ?? "",
+    };
+    setDraft(initial);
+    return initial;
+  };
 
   const handleSave = async () => {
-    if (!draft) return
-    setSaving(true)
-    const payload: Record<string, unknown> = {}
-    const trimmedName = draft.name.trim()
-    if (trimmedName && trimmedName !== user.name) payload.name = trimmedName
-    if (draft.rate_limit !== user.rate_limit) payload.rate_limit = draft.rate_limit
-    if (draft.max_concurrent !== user.max_concurrent) payload.max_concurrent = draft.max_concurrent
-    if (draft.request_cost !== (user.request_cost ?? 0.001)) payload.request_cost = draft.request_cost
-    const newQuota = draft.daily_quota === '' ? null : parseInt(draft.daily_quota)
-    const parsedQuota = isNaN(newQuota ?? 0) ? null : newQuota
-    if (parsedQuota !== user.daily_quota) payload.daily_quota = parsedQuota
-    if (draft.email !== (user.email ?? '')) payload.email = draft.email || null
-    if (draft.notes !== (user.notes ?? '')) payload.notes = draft.notes || null
-    if (draft.default_model_id !== (defaultModel?.model_id ?? '')) {
-      await onDefaultModelChange?.(draft.default_model_id || null)
+    if (!draft) return;
+    setSaving(true);
+    const payload: Record<string, unknown> = {};
+    const trimmedName = draft.name.trim();
+    if (trimmedName && trimmedName !== user.name) payload.name = trimmedName;
+    if (draft.rate_limit !== user.rate_limit) payload.rate_limit = draft.rate_limit;
+    if (draft.max_concurrent !== user.max_concurrent) payload.max_concurrent = draft.max_concurrent;
+    if (draft.request_cost !== (user.request_cost ?? 0.001)) payload.request_cost = draft.request_cost;
+    const newQuota = draft.daily_quota === "" ? null : parseInt(draft.daily_quota);
+    const parsedQuota = isNaN(newQuota ?? 0) ? null : newQuota;
+    if (parsedQuota !== user.daily_quota) payload.daily_quota = parsedQuota;
+    if (draft.email !== (user.email ?? "")) payload.email = draft.email || null;
+    if (draft.notes !== (user.notes ?? "")) payload.notes = draft.notes || null;
+    if (draft.default_model_id !== (defaultModel?.model_id ?? "")) {
+      await onDefaultModelChange?.(draft.default_model_id || null);
     }
     if (Object.keys(payload).length > 0) {
       try {
-        await updateUser({ id: user.id, data: payload })
-        setUser((prev) => ({ ...prev, ...payload }))
+        await updateUser({ id: user.id, data: payload });
+        setUser((prev) => ({ ...prev, ...payload }));
       } catch (e) {
-        showToast(e instanceof Error ? e.message : 'Failed to save changes')
+        showToast(e instanceof Error ? e.message : "Failed to save changes");
       }
     }
-    setSaving(false)
-    setDraft(null)
-  }
+    setSaving(false);
+    setDraft(null);
+  };
 
   const handleCancel = () => {
-    setDraft(null)
-    setExpanded(false)
-  }
+    setDraft(null);
+    setExpanded(false);
+  };
 
   const handleToggle = async () => {
-    await updateUser({ id: user.id, data: { is_active: !user.is_active } })
-    setUser((prev) => ({ ...prev, is_active: !prev.is_active }))
-  }
+    await updateUser({ id: user.id, data: { is_active: !user.is_active } });
+    setUser((prev) => ({ ...prev, is_active: !prev.is_active }));
+  };
 
   const handleRotate = async () => {
-    const result = await rotateKey(user.id)
-    setShowKey(result.api_key)
-  }
+    const result = await rotateKey(user.id);
+    setShowKey(result.api_key);
+  };
 
   const handleDelete = async () => {
-    if (!await confirmAction(`Delete ${user.name}?`, true)) return
-    await deleteUser(user.id)
-  }
+    if (!(await confirmAction(`Delete ${user.name}?`, true))) return;
+    await deleteUser(user.id);
+  };
 
-  const today = userWithFreshStats.today_requests ?? 0
-  const quotaPct = userWithFreshStats.daily_quota
-    ? (today / userWithFreshStats.daily_quota) * 100
-    : null
+  const today = userWithFreshStats.today_requests ?? 0;
+  const quotaPct = userWithFreshStats.daily_quota ? (today / userWithFreshStats.daily_quota) * 100 : null;
   const quotaColor =
-    quotaPct !== null
-      ? quotaPct >= 100
-        ? 'bg-red-500'
-        : quotaPct >= 80
-          ? 'bg-amber-500'
-          : 'bg-emerald-500'
-      : ''
+    quotaPct !== null ? (quotaPct >= 100 ? "bg-red-500" : quotaPct >= 80 ? "bg-amber-500" : "bg-emerald-500") : "";
 
   return (
     <div className="bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 overflow-hidden">
@@ -189,7 +192,10 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
             <button
               onClick={onToggleCheck}
               className="mt-1 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition "
-              style={{ borderColor: checked ? '#6366f1' : '#475569', backgroundColor: checked ? '#6366f1' : 'transparent' }}
+              style={{
+                borderColor: checked ? "#6366f1" : "#475569",
+                backgroundColor: checked ? "#6366f1" : "transparent",
+              }}
             >
               {checked && <Check className="w-3 h-3 text-gray-900 dark:text-white" />}
             </button>
@@ -206,8 +212,10 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
               </button>
             </div>
             {user.email && <p className="text-xs text-gray-400 dark:text-gray-500">{user.email}</p>}
-            <span className={`px-2 py-0.5 rounded text-xs font-medium ${user.is_active ? 'bg-emerald-50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-900/50 text-red-700 dark:text-red-300'}`}>
-              {user.is_active ? 'Active' : 'Inactive'}
+            <span
+              className={`px-2 py-0.5 rounded text-xs font-medium ${user.is_active ? "bg-emerald-50 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300" : "bg-red-50 dark:bg-red-900/50 text-red-700 dark:text-red-300"}`}
+            >
+              {user.is_active ? "Active" : "Inactive"}
             </span>
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Created {user.created_at?.slice(0, 10)}</p>
           </div>
@@ -244,9 +252,15 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
                 : `${fmt(today)} today`}
             </span>
             {quotaPct !== null && (
-              <span className={`text-xs font-medium ${
-                quotaPct >= 100 ? 'text-red-600 dark:text-red-400' : quotaPct >= 80 ? 'text-amber-700 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'
-              }`}>
+              <span
+                className={`text-xs font-medium ${
+                  quotaPct >= 100
+                    ? "text-red-600 dark:text-red-400"
+                    : quotaPct >= 80
+                      ? "text-amber-700 dark:text-amber-300"
+                      : "text-emerald-700 dark:text-emerald-300"
+                }`}
+              >
                 {Math.round(quotaPct)}%
               </span>
             )}
@@ -265,7 +279,9 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
       <div className="px-4 pb-3">
         <div className="flex items-center gap-2 text-sm">
           <span className="text-gray-400 dark:text-gray-500 text-xs">Quota</span>
-          <span className="text-gray-700 dark:text-gray-300">{user.daily_quota != null ? fmt(user.daily_quota) : 'Unlimited'}</span>
+          <span className="text-gray-700 dark:text-gray-300">
+            {user.daily_quota != null ? fmt(user.daily_quota) : "Unlimited"}
+          </span>
         </div>
       </div>
 
@@ -273,7 +289,10 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
         <div className="px-4 pb-3">
           <div className="flex flex-wrap gap-1.5">
             {modelAccess.map((m) => (
-              <span key={m.id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${defaultModel?.model_id === m.model_id ? 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300' : 'bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-gray-300'}`}>
+              <span
+                key={m.id}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${defaultModel?.model_id === m.model_id ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300" : "bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-gray-300"}`}
+              >
                 {m.name}
                 {defaultModel?.model_id === m.model_id && <span className="text-[10px] opacity-70">default</span>}
               </span>
@@ -287,19 +306,27 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
           onClick={handleToggle}
           className="flex items-center gap-1.5 px-3 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
         >
-          {user.is_active ? (
-            <EyeOff className="w-3.5 h-3.5" />
-          ) : (
-            <PlayCircle className="w-3.5 h-3.5" />
-          )}
-          {user.is_active ? 'Disable' : 'Enable'}
+          {user.is_active ? <EyeOff className="w-3.5 h-3.5" /> : <PlayCircle className="w-3.5 h-3.5" />}
+          {user.is_active ? "Disable" : "Enable"}
         </button>
-        <button onClick={handleRotate}           className="flex items-center gap-1.5 px-3 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+        <button
+          onClick={handleRotate}
+          className="flex items-center gap-1.5 px-3 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+        >
           <RefreshCw className="w-3.5 h-3.5" />
           Rotate Key
         </button>
-        <ConfigDropdown selectedToolId={configToolId} onSelect={(toolId) => { setConfigToolId(toolId); setShowConfigModal(true); }} />
-        <button onClick={handleDelete}           className="flex items-center gap-1.5 px-3 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/50 text-gray-700 dark:text-gray-300 hover:text-red-700 dark:hover:text-red-300">
+        <ConfigDropdown
+          selectedToolId={configToolId}
+          onSelect={(toolId) => {
+            setConfigToolId(toolId);
+            setShowConfigModal(true);
+          }}
+        />
+        <button
+          onClick={handleDelete}
+          className="flex items-center gap-1.5 px-3 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/50 text-gray-700 dark:text-gray-300 hover:text-red-700 dark:hover:text-red-300"
+        >
           <Trash2 className="w-3.5 h-3.5" />
           Delete
         </button>
@@ -345,7 +372,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
               <label className="text-xs text-gray-400 dark:text-gray-500 block mb-1">Cost/req ($)</label>
               <input
                 type="number"
-                value={draft?.request_cost ?? (user.request_cost ?? 0.001)}
+                value={draft?.request_cost ?? user.request_cost ?? 0.001}
                 min={0.0001}
                 max={1}
                 step={0.0001}
@@ -357,7 +384,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
               <label className="text-xs text-gray-400 dark:text-gray-500 block mb-1">Daily quota</label>
               <input
                 type="number"
-                value={draft?.daily_quota ?? (user.daily_quota?.toString() ?? '')}
+                value={draft?.daily_quota ?? user.daily_quota?.toString() ?? ""}
                 placeholder="Unlimited"
                 min={1}
                 onChange={(e) => setDraft({ ...ensureDraft(), daily_quota: e.target.value })}
@@ -370,7 +397,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
               <label className="text-xs text-gray-400 dark:text-gray-500 block mb-1">Email</label>
               <input
                 type="email"
-                value={draft?.email ?? (user.email ?? '')}
+                value={draft?.email ?? user.email ?? ""}
                 placeholder="user@example.com"
                 onChange={(e) => setDraft({ ...ensureDraft(), email: e.target.value })}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-center focus:border-indigo-500 focus:outline-none placeholder-gray-400 dark:placeholder-gray-500 text-sm"
@@ -380,7 +407,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
               <label className="text-xs text-gray-400 dark:text-gray-500 block mb-1">Notes</label>
               <input
                 type="text"
-                value={draft?.notes ?? (user.notes ?? '')}
+                value={draft?.notes ?? user.notes ?? ""}
                 placeholder="Internal notes..."
                 onChange={(e) => setDraft({ ...ensureDraft(), notes: e.target.value })}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-center focus:border-indigo-500 focus:outline-none placeholder-gray-400 dark:placeholder-gray-500 text-sm"
@@ -391,13 +418,15 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
             <div>
               <label className="text-xs text-gray-400 dark:text-gray-500 block mb-1">Default Model</label>
               <select
-                value={draft?.default_model_id ?? (defaultModel?.model_id ?? '')}
+                value={draft?.default_model_id ?? defaultModel?.model_id ?? ""}
                 onChange={(e) => setDraft({ ...ensureDraft(), default_model_id: e.target.value })}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-center focus:border-indigo-500 focus:outline-none text-sm"
               >
                 <option value="">No default</option>
                 {allModels.map((m) => (
-                  <option key={m.id} value={m.model_id}>{m.name}</option>
+                  <option key={m.id} value={m.model_id}>
+                    {m.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -408,7 +437,7 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
               disabled={saving}
               className="px-4 py-1.5 text-xs rounded bg-indigo-600 hover:bg-indigo-500 text-gray-900 dark:text-white transition disabled:opacity-50"
             >
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? "Saving..." : "Save"}
             </button>
             <button
               onClick={handleCancel}
@@ -426,9 +455,9 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
             <code className="flex-1 text-sm text-indigo-600 dark:text-indigo-400 font-mono break-all">{showKey}</code>
             <button
               onClick={() => {
-                copyToClipboard(showKey)
-                setShowKey('')
-                showToast('Key copied!')
+                copyToClipboard(showKey);
+                setShowKey("");
+                showToast("Key copied!");
               }}
               className="px-3 py-1 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded text-sm transition shrink-0"
             >
@@ -439,8 +468,13 @@ export default function UserCard({ user: initialUser, checked, onToggleCheck, mo
       )}
 
       {showConfigModal && (
-        <ConfigModal userId={user.id} userName={user.name} clientType={configToolId} onClose={() => setShowConfigModal(false)} />
+        <ConfigModal
+          userId={user.id}
+          userName={user.name}
+          clientType={configToolId}
+          onClose={() => setShowConfigModal(false)}
+        />
       )}
     </div>
-  )
+  );
 }

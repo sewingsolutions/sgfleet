@@ -1,5 +1,5 @@
-import '@testing-library/jest-dom/vitest'
-import { vi } from 'vitest'
+import "@testing-library/jest-dom/vitest";
+import { vi } from "vitest";
 
 // Mock localStorage
 const localStorageMock = {
@@ -8,13 +8,15 @@ const localStorageMock = {
   setItem: vi.fn((key, value) => localStorageMock.store.set(key, value)),
   removeItem: vi.fn((key) => localStorageMock.store.delete(key)),
   clear: vi.fn(() => localStorageMock.store.clear()),
-  get length() { return localStorageMock.store.size },
+  get length() {
+    return localStorageMock.store.size;
+  },
   key: vi.fn((index) => [...localStorageMock.store.keys()][index] || null),
-}
-Object.defineProperty(window, 'localStorage', { value: localStorageMock })
+};
+Object.defineProperty(window, "localStorage", { value: localStorageMock });
 
 // Mock matchMedia
-Object.defineProperty(window, 'matchMedia', {
+Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: vi.fn().mockImplementation((query) => ({
     matches: false,
@@ -23,4 +25,4 @@ Object.defineProperty(window, 'matchMedia', {
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(() => false),
   })),
-})
+});

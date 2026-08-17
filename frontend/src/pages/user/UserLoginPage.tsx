@@ -1,27 +1,27 @@
-import { useState } from 'react'
-import { useAuth } from '../../context/AuthContext'
+import { useState } from "react";
+import { useAuth } from "../../context/AuthContext";
 
 export default function UserLoginPage() {
-  const [key, setKey] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
+  const [key, setKey] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+    e.preventDefault();
+    setLoading(true);
+    setError("");
     try {
-      const ok = await login(key)
+      const ok = await login(key);
       if (!ok) {
-        setError('Invalid API token')
+        setError("Invalid API token");
       }
     } catch {
-      setError('Invalid API token')
+      setError("Invalid API token");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-white dark:bg-slate-900">
@@ -31,7 +31,9 @@ export default function UserLoginPage() {
           <p className="text-gray-500 dark:text-gray-400 mb-6">Enter your API token:</p>
 
           {error && (
-            <div className="bg-red-50 text-red-700 dark:bg-red-900/50 dark:text-red-300 px-4 py-3 rounded mb-4 text-sm">{error}</div>
+            <div className="bg-red-50 text-red-700 dark:bg-red-900/50 dark:text-red-300 px-4 py-3 rounded mb-4 text-sm">
+              {error}
+            </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -49,15 +51,16 @@ export default function UserLoginPage() {
               disabled={loading}
               className="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 rounded text-gray-900 dark:text-white font-medium transition disabled:opacity-50"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
 
           <p className="mt-6 text-xs text-gray-400 dark:text-gray-500">
-            Get your token from your SGFleet admin, or check your <code className="font-mono">.opencode.json</code> config.
+            Get your token from your SGFleet admin, or check your <code className="font-mono">.opencode.json</code>{" "}
+            config.
           </p>
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,0 +1,20 @@
+{
+  "printWidth": 120,
+  "tabWidth": 2,
+  "useTabs": false,
+  "singleQuote": false,
+  "trailingComma": "all",
+  "semi": true,
+  "bracketSpacing": true,
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "plugins": ["prettier-plugin-sh"],
+  "overrides": [
+    {
+      "files": ["*.py", "*.pyi"],
+      "options": {
+        "tabWidth": 4
+      }
+    }
+  ]
+}

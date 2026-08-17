@@ -1,12 +1,12 @@
-import { useGitLog } from '../../hooks/useGitLog'
+import { useGitLog } from "../../hooks/useGitLog";
 
 export default function VersionPage() {
-  const { data, isLoading, isError } = useGitLog()
+  const { data, isLoading, isError } = useGitLog();
 
-  if (isLoading) return null
+  if (isLoading) return null;
 
-  const head = isError ? 'error' : (data?.head || 'unknown')
-  const commits = data?.commits || []
+  const head = isError ? "error" : data?.head || "unknown";
+  const commits = data?.commits || [];
 
   return (
     <div>
@@ -23,12 +23,15 @@ export default function VersionPage() {
 
       <div className="space-y-1">
         {commits.map((c) => (
-          <div key={c.sha} className="flex items-start gap-3 py-2 border-b border-gray-200 dark:border-slate-800 last:border-0">
+          <div
+            key={c.sha}
+            className="flex items-start gap-3 py-2 border-b border-gray-200 dark:border-slate-800 last:border-0"
+          >
             <code className="text-xs font-mono text-gray-400 dark:text-gray-500 mt-0.5 shrink-0">{c.sha}</code>
             <span className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap break-words">{c.msg}</span>
           </div>
         ))}
       </div>
     </div>
-  )
+  );
 }

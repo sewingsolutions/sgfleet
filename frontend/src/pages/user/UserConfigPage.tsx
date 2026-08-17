@@ -1,10 +1,10 @@
-import { useState, useCallback } from 'react'
-import UserLayout from '../../components/UserLayout'
-import CodeBlock from '../../components/CodeBlock'
-import { useGenerateConfig } from '../../hooks/useGenerateConfig'
-import { copyToClipboard } from '../../utils/copyToClipboard'
-import { tools } from '../../config/tools'
-import type { UserConfigResponse, CursorChecklistItem } from '../../api/types'
+import { useState, useCallback } from "react";
+import UserLayout from "../../components/UserLayout";
+import CodeBlock from "../../components/CodeBlock";
+import { useGenerateConfig } from "../../hooks/useGenerateConfig";
+import { copyToClipboard } from "../../utils/copyToClipboard";
+import { tools } from "../../config/tools";
+import type { UserConfigResponse, CursorChecklistItem } from "../../api/types";
 
 const Card = ({
   tool,
@@ -16,22 +16,22 @@ const Card = ({
   onGenerate,
   onClose,
 }: {
-  tool: (typeof tools)[0]
-  loading: boolean
-  result: UserConfigResponse | null
-  checklist: CursorChecklistItem[] | null
-  error: string | null
-  visible: boolean
-  onGenerate: () => void
-  onClose: () => void
+  tool: (typeof tools)[0];
+  loading: boolean;
+  result: UserConfigResponse | null;
+  checklist: CursorChecklistItem[] | null;
+  error: string | null;
+  visible: boolean;
+  onGenerate: () => void;
+  onClose: () => void;
 }) => {
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   const copyValue = (text: string, idx: number) => {
-    copyToClipboard(text)
-    setCopiedIndex(idx)
-    setTimeout(() => setCopiedIndex(null), 2000)
-  }
+    copyToClipboard(text);
+    setCopiedIndex(idx);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
 
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-6 flex flex-col">
@@ -43,15 +43,15 @@ const Card = ({
         disabled={loading}
         className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white font-medium transition disabled:opacity-50 disabled:cursor-not-allowed text-sm"
       >
-        {loading ? 'Generating...' : 'Generate'}
+        {loading ? "Generating..." : "Generate"}
       </button>
 
       {visible && result && !error && (
         <div className="flex justify-end gap-2 mt-2">
           <button
             onClick={() => {
-              if (tool.configType === 'code' && result.config_json) {
-                copyToClipboard(result.config_json)
+              if (tool.configType === "code" && result.config_json) {
+                copyToClipboard(result.config_json);
               }
             }}
             className="px-3 py-1 bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 rounded text-sm transition"
@@ -75,7 +75,7 @@ const Card = ({
 
       {visible && result && !error && (
         <div className="mt-4 space-y-4">
-          {tool.configType === 'code' && result.config_json && (
+          {tool.configType === "code" && result.config_json && (
             <CodeBlock code={result.config_json} language={tool.language} />
           )}
         </div>
@@ -97,7 +97,7 @@ const Card = ({
                     onClick={() => copyValue(item.value, idx)}
                     className="px-3 py-1 bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 rounded text-sm transition shrink-0"
                   >
-                    {copiedIndex === idx ? 'Copied!' : 'Copy'}
+                    {copiedIndex === idx ? "Copied!" : "Copy"}
                   </button>
                 </div>
               )}
@@ -106,54 +106,57 @@ const Card = ({
         </div>
       )}
     </div>
-  )
-}
+  );
+};
 
 export default function UserConfigPage() {
-  const [generating, setGenerating] = useState<Record<string, boolean>>({})
-  const [results, setResults] = useState<Record<string, UserConfigResponse | null>>({})
-  const [checklists, setChecklists] = useState<Record<string, CursorChecklistItem[] | null>>({})
-  const [errors, setErrors] = useState<Record<string, string | null>>({})
-  const [visible, setVisible] = useState<Record<string, boolean>>({})
-  const [apiKey, setApiKey] = useState<string | null>(null)
-  const [showToken, setShowToken] = useState(false)
-  const [copiedToken, setCopiedToken] = useState(false)
+  const [generating, setGenerating] = useState<Record<string, boolean>>({});
+  const [results, setResults] = useState<Record<string, UserConfigResponse | null>>({});
+  const [checklists, setChecklists] = useState<Record<string, CursorChecklistItem[] | null>>({});
+  const [errors, setErrors] = useState<Record<string, string | null>>({});
+  const [visible, setVisible] = useState<Record<string, boolean>>({});
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [showToken, setShowToken] = useState(false);
+  const [copiedToken, setCopiedToken] = useState(false);
 
-  const { mutate: generateConfig } = useGenerateConfig()
+  const { mutate: generateConfig } = useGenerateConfig();
 
-  const handleGenerate = useCallback((clientId: string) => {
-    if (results[clientId]) {
-      setVisible(prev => ({ ...prev, [clientId]: true }))
-      return
-    }
+  const handleGenerate = useCallback(
+    (clientId: string) => {
+      if (results[clientId]) {
+        setVisible((prev) => ({ ...prev, [clientId]: true }));
+        return;
+      }
 
-    setGenerating(prev => ({ ...prev, [clientId]: true }))
-    setErrors(prev => ({ ...prev, [clientId]: null }))
-    generateConfig(clientId, {
-      onSuccess: (res) => {
-        if (res.error) {
-          setErrors(prev => ({ ...prev, [clientId]: res.error || null }))
-        } else {
-          setResults(prev => ({ ...prev, [clientId]: res }))
-          setVisible(prev => ({ ...prev, [clientId]: true }))
-          setChecklists(prev => ({ ...prev, [clientId]: res.checklist || null }))
-          if (res.api_key && !apiKey) {
-            setApiKey(res.api_key)
+      setGenerating((prev) => ({ ...prev, [clientId]: true }));
+      setErrors((prev) => ({ ...prev, [clientId]: null }));
+      generateConfig(clientId, {
+        onSuccess: (res) => {
+          if (res.error) {
+            setErrors((prev) => ({ ...prev, [clientId]: res.error || null }));
+          } else {
+            setResults((prev) => ({ ...prev, [clientId]: res }));
+            setVisible((prev) => ({ ...prev, [clientId]: true }));
+            setChecklists((prev) => ({ ...prev, [clientId]: res.checklist || null }));
+            if (res.api_key && !apiKey) {
+              setApiKey(res.api_key);
+            }
           }
-        }
-      },
-      onError: (e: Error) => {
-        setErrors(prev => ({ ...prev, [clientId]: e?.message || 'Failed to generate config' }))
-      },
-      onSettled: () => {
-        setGenerating(prev => ({ ...prev, [clientId]: false }))
-      },
-    })
-  }, [results, apiKey, generateConfig])
+        },
+        onError: (e: Error) => {
+          setErrors((prev) => ({ ...prev, [clientId]: e?.message || "Failed to generate config" }));
+        },
+        onSettled: () => {
+          setGenerating((prev) => ({ ...prev, [clientId]: false }));
+        },
+      });
+    },
+    [results, apiKey, generateConfig],
+  );
 
   const handleClose = useCallback((clientId: string) => {
-    setVisible(prev => ({ ...prev, [clientId]: false }))
-  }, [])
+    setVisible((prev) => ({ ...prev, [clientId]: false }));
+  }, []);
 
   return (
     <UserLayout>
@@ -173,17 +176,19 @@ export default function UserConfigPage() {
               <div className="flex flex-col gap-2">
                 <p className="text-sm text-gray-500 dark:text-gray-400">Your API Key:</p>
                 <div className="flex gap-2 items-center">
-                  <code className="flex-1 text-sm text-indigo-600 dark:text-indigo-300 font-mono break-all">{apiKey}</code>
+                  <code className="flex-1 text-sm text-indigo-600 dark:text-indigo-300 font-mono break-all">
+                    {apiKey}
+                  </code>
                   <div className="flex gap-2 shrink-0">
                     <button
                       onClick={() => {
-                        copyToClipboard(apiKey)
-                        setCopiedToken(true)
-                        setTimeout(() => setCopiedToken(false), 2000)
+                        copyToClipboard(apiKey);
+                        setCopiedToken(true);
+                        setTimeout(() => setCopiedToken(false), 2000);
                       }}
                       className="px-3 py-1 bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 rounded text-sm transition"
                     >
-                      {copiedToken ? 'Copied!' : 'Copy'}
+                      {copiedToken ? "Copied!" : "Copy"}
                     </button>
                   </div>
                 </div>
@@ -204,7 +209,7 @@ export default function UserConfigPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {tools.map(tool => (
+        {tools.map((tool) => (
           <Card
             key={tool.id}
             tool={tool}
@@ -219,5 +224,5 @@ export default function UserConfigPage() {
         ))}
       </div>
     </UserLayout>
-  )
+  );
 }

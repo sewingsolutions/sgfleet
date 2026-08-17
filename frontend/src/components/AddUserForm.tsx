@@ -1,29 +1,29 @@
-import { useState } from 'react'
-import { api } from '../api/client'
-import { useToast } from '../hooks/useToast'
-import { copyToClipboard } from '../utils/copyToClipboard'
+import { useState } from "react";
+import { api } from "../api/client";
+import { useToast } from "../hooks/useToast";
+import { copyToClipboard } from "../utils/copyToClipboard";
 
 interface AddUserFormProps {
-  onCreated: () => void
+  onCreated: () => void;
 }
 
 export default function AddUserForm({ onCreated }: AddUserFormProps) {
-  const showToast = useToast()
-  const [name, setName] = useState('')
-  const [showKey, setShowKey] = useState('')
+  const showToast = useToast();
+  const [name, setName] = useState("");
+  const [showKey, setShowKey] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (name.length < 2) return
+    e.preventDefault();
+    if (name.length < 2) return;
     try {
-      const user = await api.createUser({ name })
-      setShowKey(user.api_key || '')
-      setName('')
-      setTimeout(onCreated, 2000)
+      const user = await api.createUser({ name });
+      setShowKey(user.api_key || "");
+      setName("");
+      setTimeout(onCreated, 2000);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Failed to create user')
+      showToast(err instanceof Error ? err.message : "Failed to create user");
     }
-  }
+  };
 
   return (
     <>
@@ -43,14 +43,18 @@ export default function AddUserForm({ onCreated }: AddUserFormProps) {
       </form>
       {showKey && (
         <div className="mt-3 bg-gray-50 dark:bg-slate-800 border border-indigo-500/30 rounded p-4">
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">New key for <span className="text-gray-900 dark:text-white font-medium">{name}</span>:</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
+            New key for <span className="text-gray-900 dark:text-white font-medium">{name}</span>:
+          </p>
           <div className="flex gap-2 items-center">
-            <code className="flex-1 bg-gray-50 dark:bg-slate-900 px-3 py-2 rounded text-sm text-indigo-600 dark:text-indigo-300 font-mono">{showKey}</code>
+            <code className="flex-1 bg-gray-50 dark:bg-slate-900 px-3 py-2 rounded text-sm text-indigo-600 dark:text-indigo-300 font-mono">
+              {showKey}
+            </code>
             <button
               onClick={() => {
-                copyToClipboard(showKey)
-                setShowKey('')
-                showToast('Key copied!')
+                copyToClipboard(showKey);
+                setShowKey("");
+                showToast("Key copied!");
               }}
               className="px-3 py-1 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded text-sm transition"
             >
@@ -60,5 +64,5 @@ export default function AddUserForm({ onCreated }: AddUserFormProps) {
         </div>
       )}
     </>
-  )
+  );
 }

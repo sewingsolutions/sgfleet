@@ -1,27 +1,27 @@
-import { useState } from 'react'
-import { useAuth } from '../../context/AuthContext'
+import { useState } from "react";
+import { useAuth } from "../../context/AuthContext";
 
 export default function LoginPage() {
-  const [key, setKey] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-  const { login } = useAuth()
+  const [key, setKey] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+    e.preventDefault();
+    setLoading(true);
+    setError("");
     try {
-      const ok = await login(key)
+      const ok = await login(key);
       if (!ok) {
-        setError('Invalid key')
+        setError("Invalid key");
       }
     } catch {
-      setError('Invalid key')
+      setError("Invalid key");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-white dark:bg-slate-900">
@@ -31,7 +31,9 @@ export default function LoginPage() {
           <p className="text-gray-500 dark:text-gray-400 mb-6">Enter admin API key:</p>
 
           {error && (
-            <div className="bg-red-50 text-red-700 dark:bg-red-900/50 dark:text-red-300 px-4 py-3 rounded mb-4 text-sm">{error}</div>
+            <div className="bg-red-50 text-red-700 dark:bg-red-900/50 dark:text-red-300 px-4 py-3 rounded mb-4 text-sm">
+              {error}
+            </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -49,12 +51,11 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 rounded text-gray-900 dark:text-white font-medium transition disabled:opacity-50"
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
-
         </div>
       </div>
     </div>
-  )
+  );
 }

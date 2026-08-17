@@ -21,7 +21,7 @@ check_host_requirements() {
   local failed=0
 
   # Docker
-  if ! command -v docker &>/dev/null; then
+  if ! command -v docker &> /dev/null; then
     echo -e "${RED}  ✗ docker not found${NC}"
     failed=1
   else
@@ -29,7 +29,7 @@ check_host_requirements() {
   fi
 
   # Docker Compose
-  if ! docker compose version &>/dev/null; then
+  if ! docker compose version &> /dev/null; then
     echo -e "${RED}  ✗ docker compose not found${NC}"
     failed=1
   else
@@ -37,10 +37,10 @@ check_host_requirements() {
   fi
 
   # nvidia-smi
-  if ! command -v nvidia-smi &>/dev/null; then
+  if ! command -v nvidia-smi &> /dev/null; then
     echo -e "${YELLOW}  ⚠ nvidia-smi not found — GPU access will not be available${NC}"
   else
-    if ! nvidia-smi &>/dev/null; then
+    if ! nvidia-smi &> /dev/null; then
       echo -e "${RED}  ✗ nvidia-smi failed — GPU drivers may not be installed${NC}"
       failed=1
     else
@@ -49,7 +49,7 @@ check_host_requirements() {
   fi
 
   # nvidia-ctk (NVIDIA Container Toolkit)
-  if ! command -v nvidia-ctk &>/dev/null; then
+  if ! command -v nvidia-ctk &> /dev/null; then
     echo -e "${YELLOW}  ⚠ nvidia-ctk not found — NVIDIA Container Toolkit may not be installed${NC}"
     echo -e "     Docker containers may not be able to access GPUs."
     echo -e "     Install: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html"
@@ -58,7 +58,7 @@ check_host_requirements() {
   fi
 
   # openssl
-  if ! command -v openssl &>/dev/null; then
+  if ! command -v openssl &> /dev/null; then
     echo -e "${RED}  ✗ openssl not found — required for encryption key generation${NC}"
     failed=1
   else
@@ -94,7 +94,7 @@ load_existing() {
         v="${BASH_REMATCH[1]}"
       else
         v="${v%%#*}"
-        v="$(echo "$v" | xargs 2>/dev/null || true)"
+        v="$(echo "$v" | xargs 2> /dev/null || true)"
       fi
 
       existing_values["$k"]="$v"
@@ -120,11 +120,26 @@ prompt_infra() {
   local desc default
 
   case "$name" in
-    MODELS_DIR)       desc="Host directory for model files"; default="/models";;
-    DATA_DIR)         desc="Host directory for data files"; default="./data";;
-    LOGS_DIR)         desc="Host directory for log files"; default="./logs";;
-    SGFLEET_BASE_URL) desc="External gateway URL (CORS, callbacks)"; default="https://your-gateway-domain.example.com/v1";;
-    PROMETHEUS_HOST)  desc="Prometheus host (omit to disable metrics)"; default="";;
+    MODELS_DIR)
+      desc="Host directory for model files"
+      default="/models"
+      ;;
+    DATA_DIR)
+      desc="Host directory for data files"
+      default="./data"
+      ;;
+    LOGS_DIR)
+      desc="Host directory for log files"
+      default="./logs"
+      ;;
+    SGFLEET_BASE_URL)
+      desc="External gateway URL (CORS, callbacks)"
+      default="https://your-gateway-domain.example.com/v1"
+      ;;
+    PROMETHEUS_HOST)
+      desc="Prometheus host (omit to disable metrics)"
+      default=""
+      ;;
   esac
 
   # Check for existing value
@@ -135,9 +150,15 @@ prompt_infra() {
       read -rp "  [K]eep / [U]pdate / [R]emove? " c
       c="${c^^}"
       case "$c" in
-        K) result["$name"]="$cur"; return 0 ;;
+        K)
+          result["$name"]="$cur"
+          return 0
+          ;;
         U) ;; # fall through to prompt below
-        R) result["$name"]=""; return 0 ;;
+        R)
+          result["$name"]=""
+          return 0
+          ;;
         *) echo "  Enter K, U, or R." ;;
       esac
     done
@@ -151,11 +172,11 @@ prompt_infra() {
 # ── Detect machine IP ────────────────────────────────────────────────
 detect_ip() {
   local ip=""
-  if command -v hostname &>/dev/null; then
-    ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  if command -v hostname &> /dev/null; then
+    ip="$(hostname -I 2> /dev/null | awk '{print $1}' || true)"
   fi
-  if [[ -z "$ip" ]] && command -v ip &>/dev/null; then
-    ip="$(ip route get 1 2>/dev/null | awk '{print $NF; exit}' || true)"
+  if [[ -z "$ip" ]] && command -v ip &> /dev/null; then
+    ip="$(ip route get 1 2> /dev/null | awk '{print $NF; exit}' || true)"
   fi
   if [[ -z "$ip" ]]; then
     ip="localhost"
@@ -244,14 +265,14 @@ esc_prom="$(env_escape "${result[PROMETHEUS_HOST]:-}")"
 
   echo ""
   echo "# Custom user variables (preserved from previous .env)"
-      if [[ $HAS_EXISTING_VARS -eq 1 ]]; then
-        for k in "${!existing_values[@]}"; do
-          # Skip the keys we already explicitly manage above
-          if [[ "$k" != "MODELS_DIR" && "$k" != "HOST_MODELS_DIR" && "$k" != "DATA_DIR" && "$k" != "LOGS_DIR" && "$k" != "SGFLEET_BASE_URL" && "$k" != "SGFLEET_ENCRYPTION_KEY" && "$k" != "PROMETHEUS_HOST" ]]; then
-            echo "${k}=\"${existing_values[$k]}\""
-          fi
-        done
+  if [[ $HAS_EXISTING_VARS -eq 1 ]]; then
+    for k in "${!existing_values[@]}"; do
+      # Skip the keys we already explicitly manage above
+      if [[ "$k" != "MODELS_DIR" && "$k" != "HOST_MODELS_DIR" && "$k" != "DATA_DIR" && "$k" != "LOGS_DIR" && "$k" != "SGFLEET_BASE_URL" && "$k" != "SGFLEET_ENCRYPTION_KEY" && "$k" != "PROMETHEUS_HOST" ]]; then
+        echo "${k}=\"${existing_values[$k]}\""
       fi
+    done
+  fi
 } > .env
 
 # Step 7: Generate models.json
@@ -261,14 +282,17 @@ if [[ ! -f models.json && -d "$models_dir" ]]; then
   dirs=()
   while IFS= read -r -d '' entry; do
     dirs+=("$(basename "$entry")")
-  done < <(find "$models_dir" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | sort -z)
+  done < <(find "$models_dir" -mindepth 1 -maxdepth 1 -type d -print0 2> /dev/null | sort -z)
 
   if [[ ${#dirs[@]} -eq 0 ]]; then
     echo -e "${YELLOW}  No model directories found. Run init.sh again after placing models.${NC}"
   else
     plural="y"
     [[ ${#dirs[@]} -ne 1 ]] && plural="ies"
-    echo "  Found ${#dirs[@]} director${plural}: $(IFS=', '; echo "${dirs[*]}")"
+    echo "  Found ${#dirs[@]} director${plural}: $(
+      IFS=', '
+      echo "${dirs[*]}"
+    )"
 
     model_entries=""
     first=true
@@ -297,7 +321,8 @@ if [[ ! -f models.json && -d "$models_dir" ]]; then
       echo "  ${GREEN}+ ${d} (id: ${slug}, active: ${active_val})${NC}"
       added_count=$((added_count + 1))
 
-      entry_json=$(cat <<MODELEOF
+      entry_json=$(
+        cat << MODELEOF
     {
       "id": "${slug}",
       "name": "${d}",
@@ -327,7 +352,7 @@ if [[ ! -f models.json && -d "$models_dir" ]]; then
       ]
     }
 MODELEOF
-)
+      )
 
       if $first; then
         model_entries="  ${entry_json}"
@@ -339,14 +364,15 @@ MODELEOF
     done
 
     if [[ -n "$model_entries" ]]; then
-      cat > models.json <<EOF
+      cat > models.json << EOF
 {
   "models": [
   ${model_entries}
   ]
 }
 EOF
-      ap="y"; [[ added_count -ne 1 ]] && ap="ies"
+      ap="y"
+      [[ added_count -ne 1 ]] && ap="ies"
       echo -e "\n${GREEN}Wrote models.json with ${added_count} model entrie${ap}.${NC}"
     fi
   fi
