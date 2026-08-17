@@ -88,6 +88,23 @@ cd backend && ruff check app/ tests/
 cd frontend && npm run lint
 ```
 
+## Formatting
+
+```bash
+# Format Python
+cd backend && ruff format app/ tests/
+
+# Format frontend (TS, TSX, JSON)
+cd frontend && npm run format
+
+# Format shell scripts, Dockerfiles, YAML, JSON (from root)
+npx prettier --write scripts/init.sh backend/scripts/entrypoint.sh backend/deploy.sh frontend/deploy.sh test.sh backend/Dockerfile frontend/Dockerfile docker-compose.yml models.json telemetry/alloy/generate-config.sh
+
+# Check formatting (no changes)
+cd frontend && npm run format:check
+npx prettier --check scripts/init.sh backend/scripts/entrypoint.sh backend/deploy.sh frontend/deploy.sh test.sh backend/Dockerfile frontend/Dockerfile docker-compose.yml telemetry/alloy/generate-config.sh
+```
+
 ## Testing
 
 ```bash

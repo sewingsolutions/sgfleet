@@ -1,314 +1,320 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
-import { ChevronLeft, CheckCircle } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '../../api/client'
-import type { HFModel, DiskUsage } from '../../api/types'
-import { useToast } from '../../hooks/useToast'
-import { parseDownloadSSE, validateDownload, formatBytes, formatParams } from '../../services/downloadService'
+import { useState, useCallback, useEffect, useRef } from "react";
+import { ChevronLeft, CheckCircle } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "../../api/client";
+import type { HFModel, DiskUsage } from "../../api/types";
+import { useToast } from "../../hooks/useToast";
+import { parseDownloadSSE, validateDownload, formatBytes, formatParams } from "../../services/downloadService";
 
-const MODELS_DIR = (typeof window !== 'undefined' && (window as Window & { __MODELS_DIR__?: string }).__MODELS_DIR__) || ''
+const MODELS_DIR =
+  (typeof window !== "undefined" && (window as Window & { __MODELS_DIR__?: string }).__MODELS_DIR__) || "";
 
 export default function ModelDownloadPage() {
-  const navigate = useNavigate()
-  const showToast = useToast()
-  const queryClient = useQueryClient()
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchDebounce, setSearchDebounce] = useState('')
-  const [selectedModel, setSelectedModel] = useState<HFModel | null>(null)
-  const [targetDir, setTargetDir] = useState('')
-  const [selectedGpus, setSelectedGpus] = useState<number[]>([])
-  const [downloadState, setDownloadState] = useState<'idle' | 'downloading' | 'complete' | 'error'>('idle')
-  const [downloadLogs, setDownloadLogs] = useState<string[]>([])
-  const [downloadProgress, setDownloadProgress] = useState(0)
-  const [showTokenPrompt, setShowTokenPrompt] = useState(false)
-  const [newToken, setNewToken] = useState('')
-  const abortRef = useRef<AbortController | null>(null)
-  const logEndRef = useRef<HTMLDivElement>(null)
-  const userEditedTargetDir = useRef(false)
+  const navigate = useNavigate();
+  const showToast = useToast();
+  const queryClient = useQueryClient();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchDebounce, setSearchDebounce] = useState("");
+  const [selectedModel, setSelectedModel] = useState<HFModel | null>(null);
+  const [targetDir, setTargetDir] = useState("");
+  const [selectedGpus, setSelectedGpus] = useState<number[]>([]);
+  const [downloadState, setDownloadState] = useState<"idle" | "downloading" | "complete" | "error">("idle");
+  const [downloadLogs, setDownloadLogs] = useState<string[]>([]);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [showTokenPrompt, setShowTokenPrompt] = useState(false);
+  const [newToken, setNewToken] = useState("");
+  const abortRef = useRef<AbortController | null>(null);
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const userEditedTargetDir = useRef(false);
 
   // GPU info
   const { data: gpuData, isLoading: gpusLoading } = useQuery({
-    queryKey: ['download-gpus'],
+    queryKey: ["download-gpus"],
     queryFn: api.getGPUs,
-  })
+  });
 
   // Disk space
   const { data: diskData } = useQuery<DiskUsage>({
-    queryKey: ['download-disk'],
+    queryKey: ["download-disk"],
     queryFn: api.getDiskSpace,
     refetchInterval: 30_000,
-  })
+  });
 
   // HF Token
   const { data: tokenData, isLoading: tokenLoading } = useQuery({
-    queryKey: ['download-hf-token'],
+    queryKey: ["download-hf-token"],
     queryFn: api.getHFToken,
-  })
+  });
 
-  const hasToken = tokenData?.has_token ?? false
-  const totalVram = gpuData?.total_vram_gb ?? 0
+  const hasToken = tokenData?.has_token ?? false;
+  const totalVram = gpuData?.total_vram_gb ?? 0;
 
   // Model config creation mutation
   const createConfigMutation = useMutation({
     mutationFn: api.createModelConfig,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['models'] })
-      showToast('Model config created')
+      queryClient.invalidateQueries({ queryKey: ["models"] });
+      showToast("Model config created");
     },
-  })
+  });
 
   // Check for active downloads on mount and resume
   useEffect(() => {
-    let cancelled = false
-    api.getDownloadStatus().then(async (res) => {
-      if (cancelled) return
-      // Find most recent download (active first, then completed/errored)
-      const active = res.downloads.find((d) => d.status === 'downloading')
-      const done = res.downloads.find((d) => d.status !== 'downloading')
-      const job = active || done
-      if (!job) return
+    let cancelled = false;
+    api
+      .getDownloadStatus()
+      .then(async (res) => {
+        if (cancelled) return;
+        // Find most recent download (active first, then completed/errored)
+        const active = res.downloads.find((d) => d.status === "downloading");
+        const done = res.downloads.find((d) => d.status !== "downloading");
+        const job = active || done;
+        if (!job) return;
 
-      console.log('[ModelDownloadPage] Resuming download:', job)
+        console.log("[ModelDownloadPage] Resuming download:", job);
 
-      // Search for the model info by ID
-      const models = await api.searchHFModels(job.model_id, undefined, 10).catch(() => ({ models: [], hidden_by_vram: 0 }))
-      const modelMatch = models.models.find((m) => m.id === job.model_id)
+        // Search for the model info by ID
+        const models = await api
+          .searchHFModels(job.model_id, undefined, 10)
+          .catch(() => ({ models: [], hidden_by_vram: 0 }));
+        const modelMatch = models.models.find((m) => m.id === job.model_id);
 
-      if (modelMatch) {
-        setSelectedModel(modelMatch)
-      } else {
-        console.warn('[ModelDownloadPage] Model not found in search for', job.model_id)
-        // Create a minimal model stub so the download UI renders
-        setSelectedModel({
-          id: job.model_id,
-          author: '',
-          likes: 0,
-          downloads: 0,
-          vram_gb: 0,
-          parameters: {},
-          total_params: 0,
-          storage_bytes: 0,
-          library: '',
-          tags: [],
-          gated: false,
-          last_modified: '',
-          config: {},
-          architectures: [],
-        })
-      }
+        if (modelMatch) {
+          setSelectedModel(modelMatch);
+        } else {
+          console.warn("[ModelDownloadPage] Model not found in search for", job.model_id);
+          // Create a minimal model stub so the download UI renders
+          setSelectedModel({
+            id: job.model_id,
+            author: "",
+            likes: 0,
+            downloads: 0,
+            vram_gb: 0,
+            parameters: {},
+            total_params: 0,
+            storage_bytes: 0,
+            library: "",
+            tags: [],
+            gated: false,
+            last_modified: "",
+            config: {},
+            architectures: [],
+          });
+        }
 
-      setTargetDir(job.target_dir)
-      setDownloadLogs(job.logs)
-      setDownloadProgress(job.progress)
+        setTargetDir(job.target_dir);
+        setDownloadLogs(job.logs);
+        setDownloadProgress(job.progress);
 
-      if (job.status === 'downloading') {
-        setDownloadState('downloading')
-        setDownloadLogs((prev) => [...prev, 'Resuming download session...'])
+        if (job.status === "downloading") {
+          setDownloadState("downloading");
+          setDownloadLogs((prev) => [...prev, "Resuming download session..."]);
 
-        // Start SSE to follow progress (uses /follow, not /stream)
-        const abort = new AbortController()
-        abortRef.current = abort
-        const url = `/api/download/follow?target_dir=${encodeURIComponent(job.target_dir)}`
+          // Start SSE to follow progress (uses /follow, not /stream)
+          const abort = new AbortController();
+          abortRef.current = abort;
+          const url = `/api/download/follow?target_dir=${encodeURIComponent(job.target_dir)}`;
 
-        fetch(url, { signal: abort.signal }).then(async (response) => {
-          const reader = response.body?.getReader()
-          if (!reader) return
-          const decoder = new TextDecoder()
-          let buffer = ''
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done || cancelled) break
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() || ''
-            for (const line of lines) {
-              const parsed = parseDownloadSSE(line)
-              if (!parsed) continue
-              const { event, progress, downloadedMb } = parsed
-              if (event.type === 'log') {
-                setDownloadLogs(prev => [...prev.slice(-50), event.line || ''])
-                if (progress !== undefined) setDownloadProgress(progress)
-                if (downloadedMb !== undefined) {
-                  setDownloadLogs(prev => [...prev, `  → ${downloadedMb.toFixed(1)} MB downloaded`])
+          fetch(url, { signal: abort.signal })
+            .then(async (response) => {
+              const reader = response.body?.getReader();
+              if (!reader) return;
+              const decoder = new TextDecoder();
+              let buffer = "";
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done || cancelled) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() || "";
+                for (const line of lines) {
+                  const parsed = parseDownloadSSE(line);
+                  if (!parsed) continue;
+                  const { event, progress, downloadedMb } = parsed;
+                  if (event.type === "log") {
+                    setDownloadLogs((prev) => [...prev.slice(-50), event.line || ""]);
+                    if (progress !== undefined) setDownloadProgress(progress);
+                    if (downloadedMb !== undefined) {
+                      setDownloadLogs((prev) => [...prev, `  → ${downloadedMb.toFixed(1)} MB downloaded`]);
+                    }
+                  } else if (event.type === "heartbeat") {
+                    if (progress !== undefined) setDownloadProgress(progress);
+                  } else if (event.type === "complete") {
+                    setDownloadState("complete");
+                    setDownloadProgress(100);
+                    if (modelMatch && !cancelled) {
+                      await createConfigMutation.mutateAsync({
+                        hf_model: modelMatch,
+                        target_dir: job.target_dir,
+                        gpu_indices: selectedGpus,
+                      });
+                      queryClient.invalidateQueries({ queryKey: ["models"] });
+                    }
+                    showToast("Download complete!");
+                  } else if (event.type === "error") {
+                    setDownloadState("error");
+                    showToast(`Download failed: ${event.message}`);
+                  }
                 }
-              } else if (event.type === 'heartbeat') {
-                if (progress !== undefined) setDownloadProgress(progress)
-              } else if (event.type === 'complete') {
-                setDownloadState('complete')
-                setDownloadProgress(100)
-                if (modelMatch && !cancelled) {
-                  await createConfigMutation.mutateAsync({
-                    hf_model: modelMatch,
-                    target_dir: job.target_dir,
-                    gpu_indices: selectedGpus,
-                  })
-                  queryClient.invalidateQueries({ queryKey: ['models'] })
-                }
-                showToast('Download complete!')
-              } else if (event.type === 'error') {
-                setDownloadState('error')
-                showToast(`Download failed: ${event.message}`)
               }
-            }
-          }
-        }).catch((e) => console.error('[ModelDownloadPage] SSE follow error:', e))
-      } else if (job.status === 'complete') {
-        setDownloadState('complete')
-        setDownloadProgress(100)
-        showToast('Download was completed')
-      } else {
-        setDownloadState('error')
-        showToast(`Download failed: ${job.error || 'unknown error'}`)
-      }
-    }).catch((e) => console.error('[ModelDownloadPage] resume error:', e))
-    return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only effect; adding deps would cause unwanted re-runs
-  }, [])
+            })
+            .catch((e) => console.error("[ModelDownloadPage] SSE follow error:", e));
+        } else if (job.status === "complete") {
+          setDownloadState("complete");
+          setDownloadProgress(100);
+          showToast("Download was completed");
+        } else {
+          setDownloadState("error");
+          showToast(`Download failed: ${job.error || "unknown error"}`);
+        }
+      })
+      .catch((e) => console.error("[ModelDownloadPage] resume error:", e));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only effect; adding deps would cause unwanted re-runs
+  }, []);
 
   // Search models
   useEffect(() => {
-    const t = setTimeout(() => setSearchDebounce(searchQuery), 400)
-    return () => clearTimeout(t)
-  }, [searchQuery])
+    const t = setTimeout(() => setSearchDebounce(searchQuery), 400);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
 
   const { data: searchResult, isLoading: searchLoading } = useQuery({
-    queryKey: ['hf-search', searchDebounce, totalVram],
+    queryKey: ["hf-search", searchDebounce, totalVram],
     queryFn: () => api.searchHFModels(searchDebounce, totalVram || undefined, 50),
     staleTime: 300_000,
-  })
+  });
 
-  const models = searchResult?.models ?? []
-  const hiddenByVram = searchResult?.hidden_by_vram ?? 0
+  const models = searchResult?.models ?? [];
+  const hiddenByVram = searchResult?.hidden_by_vram ?? 0;
 
   // GPU selection
   const toggleGpu = (idx: number) => {
-    setSelectedGpus(prev =>
-      prev.includes(idx) ? prev.filter(g => g !== idx) : [...prev, idx]
-    )
-  }
+    setSelectedGpus((prev) => (prev.includes(idx) ? prev.filter((g) => g !== idx) : [...prev, idx]));
+  };
 
   // Token save mutation
   const saveTokenMutation = useMutation({
     mutationFn: api.setHFToken,
     onSuccess: () => {
-      setShowTokenPrompt(false)
-      showToast('HF API token saved')
-      queryClient.invalidateQueries({ queryKey: ['download-hf-token'] })
+      setShowTokenPrompt(false);
+      showToast("HF API token saved");
+      queryClient.invalidateQueries({ queryKey: ["download-hf-token"] });
     },
-  })
+  });
 
   const selectedGpuVram = selectedGpus.length
-    ? gpuData?.gpus?.filter(g => selectedGpus.includes(g.index)).reduce((s, g) => s + g.vram_gb, 0) ?? 0
-    : totalVram
+    ? (gpuData?.gpus?.filter((g) => selectedGpus.includes(g.index)).reduce((s, g) => s + g.vram_gb, 0) ?? 0)
+    : totalVram;
 
   // Start SSE download
   const startDownload = useCallback(async () => {
-    if (!selectedModel || !targetDir) return
+    if (!selectedModel || !targetDir) return;
 
-    const pathExists = await api.checkModelPath(targetDir)
-    const disk = await api.getDiskSpace()
+    const pathExists = await api.checkModelPath(targetDir);
+    const disk = await api.getDiskSpace();
     const validation = validateDownload({
       pathExists: pathExists.exists,
       storageBytes: selectedModel.storage_bytes || 0,
       freeBytes: disk.free_bytes,
       vramGb: selectedModel.vram_gb,
       selectedVramGb: selectedGpuVram,
-    })
+    });
     if (!validation.ok) {
-      showToast(validation.errors[0])
-      return
+      showToast(validation.errors[0]);
+      return;
     }
 
-    setDownloadState('downloading')
-    setDownloadLogs([])
-    setDownloadProgress(0)
+    setDownloadState("downloading");
+    setDownloadLogs([]);
+    setDownloadProgress(0);
 
-    const abort = new AbortController()
-    abortRef.current = abort
+    const abort = new AbortController();
+    abortRef.current = abort;
 
-    const gpuParam = selectedGpus.length ? `&gpus=${selectedGpus.join(',')}` : ''
-    const expectedBytes = selectedModel.storage_bytes || 0
-    const url = `/api/download/stream?model_id=${encodeURIComponent(selectedModel.id)}&target_dir=${encodeURIComponent(targetDir)}&expected_bytes=${expectedBytes}${gpuParam}`
+    const gpuParam = selectedGpus.length ? `&gpus=${selectedGpus.join(",")}` : "";
+    const expectedBytes = selectedModel.storage_bytes || 0;
+    const url = `/api/download/stream?model_id=${encodeURIComponent(selectedModel.id)}&target_dir=${encodeURIComponent(targetDir)}&expected_bytes=${expectedBytes}${gpuParam}`;
 
     try {
-      const response = await fetch(url, { signal: abort.signal })
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('No reader')
+      const response = await fetch(url, { signal: abort.signal });
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No reader");
 
-      const decoder = new TextDecoder()
-      let buffer = ''
+      const decoder = new TextDecoder();
+      let buffer = "";
 
       while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+        const { done, value } = await reader.read();
+        if (done) break;
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
         for (const line of lines) {
-          const parsed = parseDownloadSSE(line)
-          if (!parsed) continue
-          const { event, progress, downloadedMb } = parsed
-          if (event.type === 'log') {
-            setDownloadLogs(prev => [...prev.slice(-50), event.line || ''])
-            if (progress !== undefined) setDownloadProgress(progress)
+          const parsed = parseDownloadSSE(line);
+          if (!parsed) continue;
+          const { event, progress, downloadedMb } = parsed;
+          if (event.type === "log") {
+            setDownloadLogs((prev) => [...prev.slice(-50), event.line || ""]);
+            if (progress !== undefined) setDownloadProgress(progress);
             if (downloadedMb !== undefined) {
-              setDownloadLogs(prev => [...prev, `  → ${downloadedMb.toFixed(1)} MB downloaded`])
+              setDownloadLogs((prev) => [...prev, `  → ${downloadedMb.toFixed(1)} MB downloaded`]);
             }
-          } else if (event.type === 'complete') {
-            setDownloadState('complete')
-            setDownloadProgress(100)
+          } else if (event.type === "complete") {
+            setDownloadState("complete");
+            setDownloadProgress(100);
             await createConfigMutation.mutateAsync({
               hf_model: selectedModel,
               target_dir: targetDir,
               gpu_indices: selectedGpus,
-            })
-            showToast('Download complete!')
-          } else if (event.type === 'error') {
-            setDownloadState('error')
-            showToast(`Download failed: ${event.message}`)
+            });
+            showToast("Download complete!");
+          } else if (event.type === "error") {
+            setDownloadState("error");
+            showToast(`Download failed: ${event.message}`);
           }
         }
       }
     } catch (e: unknown) {
-      if (abort.signal.aborted) return
-      const msg = e instanceof Error ? e.message : String(e)
-      if (msg !== 'The operation was aborted.') {
-        setDownloadState('error')
-        showToast(`Download error: ${msg}`)
+      if (abort.signal.aborted) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg !== "The operation was aborted.") {
+        setDownloadState("error");
+        showToast(`Download error: ${msg}`);
       }
     }
-  }, [selectedModel, targetDir, selectedGpus, selectedGpuVram, createConfigMutation, showToast])
+  }, [selectedModel, targetDir, selectedGpus, selectedGpuVram, createConfigMutation, showToast]);
 
   // Cleanup mutation
   const cleanupMutation = useMutation({
     mutationFn: api.cleanupModelPath,
     onSuccess: () => {
-      showToast('Path cleaned up')
-      setDownloadState('idle')
+      showToast("Path cleaned up");
+      setDownloadState("idle");
     },
-  })
+  });
 
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [downloadLogs])
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [downloadLogs]);
 
   return (
     <div>
       {/* Breadcrumb */}
       <div className="mb-4">
         <button
-          onClick={() => navigate('/admin/models')}
+          onClick={() => navigate("/admin/models")}
           className="text-indigo-600 dark:text-indigo-400 hover:underline text-sm flex items-center gap-1"
         >
           <ChevronLeft className="w-4 h-4" />
           Back to Models
         </button>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-          Download Model from HuggingFace
-        </h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">Download Model from HuggingFace</h1>
       </div>
 
       {/* GPU Info Banner */}
@@ -321,7 +327,7 @@ export default function ModelDownloadPage() {
             ) : gpuData?.gpus?.length ? (
               <div className="mt-2">
                 <p className="text-gray-600 dark:text-gray-300">
-                  GPUs: {gpuData.gpus.map(g => g.name).join(', ')} ({totalVram} GB total VRAM)
+                  GPUs: {gpuData.gpus.map((g) => g.name).join(", ")} ({totalVram} GB total VRAM)
                 </p>
                 {diskData && (
                   <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
@@ -346,28 +352,45 @@ export default function ModelDownloadPage() {
 
       {/* Token Prompt Modal */}
       {showTokenPrompt && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowTokenPrompt(false)}>
-          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          onClick={() => setShowTokenPrompt(false)}
+        >
+          <div
+            className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">HuggingFace API Token</h3>
             <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
-              Required for gated models. Get one at{' '}
-              <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 underline">
+              Required for gated models. Get one at{" "}
+              <a
+                href="https://huggingface.co/settings/tokens"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-indigo-600 dark:text-indigo-400 underline"
+              >
                 huggingface.co/settings/tokens
               </a>
             </p>
             <input
               type="password"
               value={newToken}
-              onChange={e => setNewToken(e.target.value)}
+              onChange={(e) => setNewToken(e.target.value)}
               placeholder="hf_..."
               className="w-full px-3 py-2 bg-gray-100 dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none mb-4"
             />
             <div className="flex justify-end gap-2">
-              <button onClick={() => setShowTokenPrompt(false)} className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded">
+              <button
+                onClick={() => setShowTokenPrompt(false)}
+                className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded"
+              >
                 Cancel
               </button>
               <button
-                onClick={() => { saveTokenMutation.mutate(newToken); setNewToken('') }}
+                onClick={() => {
+                  saveTokenMutation.mutate(newToken);
+                  setNewToken("");
+                }}
                 disabled={saveTokenMutation.isPending || !newToken}
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white text-sm disabled:opacity-50"
               >
@@ -387,7 +410,7 @@ export default function ModelDownloadPage() {
               <input
                 type="text"
                 value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search HuggingFace models..."
                 className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white focus:border-indigo-500 focus:outline-none"
               />
@@ -404,33 +427,32 @@ export default function ModelDownloadPage() {
             )}
 
             <div className="space-y-2 max-h-[500px] overflow-y-auto">
-              {models.map(m => (
+              {models.map((m) => (
                 <button
                   key={m.id}
                   onClick={() => {
-                    setSelectedModel(m)
-                    const shortName = m.id.split('/').pop() || ''
-                    setTargetDir(shortName)
-                    userEditedTargetDir.current = false
+                    setSelectedModel(m);
+                    const shortName = m.id.split("/").pop() || "";
+                    setTargetDir(shortName);
+                    userEditedTargetDir.current = false;
                   }}
                   className={`w-full text-left p-3 rounded border transition ${
                     selectedModel?.id === m.id
-                      ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
-                      : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600'
+                      ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20"
+                      : "border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600"
                   }`}
                 >
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="font-medium text-gray-900 dark:text-white text-sm">{m.id}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        {formatParams(m.total_params)} params · {m.vram_gb.toFixed(1)} GB VRAM · {formatBytes(m.storage_bytes)}
+                        {formatParams(m.total_params)} params · {m.vram_gb.toFixed(1)} GB VRAM ·{" "}
+                        {formatBytes(m.storage_bytes)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-400">
-                      {m.gated && !hasToken && (
-                        <span className="text-amber-500">🔒 Gated</span>
-                      )}
-                      <span>{m.downloads > 0 ? formatParams(m.downloads) + ' ↓' : ''}</span>
+                      {m.gated && !hasToken && <span className="text-amber-500">🔒 Gated</span>}
+                      <span>{m.downloads > 0 ? formatParams(m.downloads) + " ↓" : ""}</span>
                     </div>
                   </div>
                 </button>
@@ -447,19 +469,27 @@ export default function ModelDownloadPage() {
           <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4 border border-gray-200 dark:border-slate-700 sticky top-4">
             {!selectedModel ? (
               <p className="text-gray-500 dark:text-gray-400 text-sm">Select a model to download</p>
-            ) : downloadState === 'complete' ? (
+            ) : downloadState === "complete" ? (
               <div>
                 <div className="text-center py-4">
                   <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
                   <h3 className="text-lg font-bold text-gray-900 dark:text-white">Download Complete</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Model downloaded to</p>
-                  <code className="text-xs bg-gray-200 dark:bg-slate-700 px-2 py-1 rounded block mt-1 break-all">{targetDir}</code>
+                  <code className="text-xs bg-gray-200 dark:bg-slate-700 px-2 py-1 rounded block mt-1 break-all">
+                    {targetDir}
+                  </code>
                   <div className="mt-4 flex gap-2 justify-center">
-                    <button onClick={() => navigate('/admin/models')} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white text-sm">
+                    <button
+                      onClick={() => navigate("/admin/models")}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white text-sm"
+                    >
                       View Models
                     </button>
                     <button
-                      onClick={() => { setDownloadState('idle'); setSelectedModel(null) }}
+                      onClick={() => {
+                        setDownloadState("idle");
+                        setSelectedModel(null);
+                      }}
                       className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded text-sm"
                     >
                       Download Another
@@ -467,7 +497,7 @@ export default function ModelDownloadPage() {
                   </div>
                 </div>
               </div>
-            ) : downloadState === 'downloading' ? (
+            ) : downloadState === "downloading" ? (
               <div>
                 <h3 className="font-bold text-gray-900 dark:text-white mb-2">Downloading...</h3>
                 <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2 mb-3">
@@ -485,7 +515,10 @@ export default function ModelDownloadPage() {
                 </div>
                 <div className="mt-3 flex gap-2">
                   <button
-                    onClick={() => { abortRef.current?.abort(); setDownloadState('idle') }}
+                    onClick={() => {
+                      abortRef.current?.abort();
+                      setDownloadState("idle");
+                    }}
                     className="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-white text-xs"
                   >
                     Cancel
@@ -499,7 +532,7 @@ export default function ModelDownloadPage() {
                   </button>
                 </div>
               </div>
-            ) : downloadState === 'error' ? (
+            ) : downloadState === "error" ? (
               <div>
                 <h3 className="font-bold text-red-600 dark:text-red-400 mb-2">Download Failed</h3>
                 <div className="bg-gray-900 dark:bg-slate-950 rounded p-2 max-h-40 overflow-y-auto font-mono text-xs text-red-400 mb-3">
@@ -509,7 +542,10 @@ export default function ModelDownloadPage() {
                 </div>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => { setDownloadState('idle'); setDownloadLogs([]) }}
+                    onClick={() => {
+                      setDownloadState("idle");
+                      setDownloadLogs([]);
+                    }}
                     className="flex-1 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded text-white text-xs"
                   >
                     Retry
@@ -527,21 +563,22 @@ export default function ModelDownloadPage() {
               <div>
                 <h3 className="font-bold text-gray-900 dark:text-white mb-1">{selectedModel.id}</h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                  {formatParams(selectedModel.total_params)} params · {selectedModel.vram_gb.toFixed(1)} GB VRAM · {formatBytes(selectedModel.storage_bytes)}
+                  {formatParams(selectedModel.total_params)} params · {selectedModel.vram_gb.toFixed(1)} GB VRAM ·{" "}
+                  {formatBytes(selectedModel.storage_bytes)}
                 </p>
 
                 {/* GPU Selection */}
                 <div className="mb-3">
                   <label className="text-xs text-gray-500 dark:text-gray-400 block mb-1">GPUs</label>
                   <div className="flex flex-wrap gap-1">
-                    {gpuData?.gpus?.map(g => (
+                    {gpuData?.gpus?.map((g) => (
                       <button
                         key={g.index}
                         onClick={() => toggleGpu(g.index)}
                         className={`px-2 py-1 rounded text-xs border transition ${
                           selectedGpus.includes(g.index)
-                            ? 'bg-indigo-600 text-white border-indigo-600'
-                            : 'bg-white dark:bg-slate-900 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-slate-600'
+                            ? "bg-indigo-600 text-white border-indigo-600"
+                            : "bg-white dark:bg-slate-900 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-slate-600"
                         }`}
                       >
                         {g.name} ({g.vram_gb}GB)
@@ -549,7 +586,9 @@ export default function ModelDownloadPage() {
                     ))}
                   </div>
                   {selectedGpus.length > 0 && (
-                    <p className="text-xs text-gray-400 mt-1">Selected: {selectedGpuVram.toFixed(1)} GB VRAM, TP={selectedGpus.length}</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Selected: {selectedGpuVram.toFixed(1)} GB VRAM, TP={selectedGpus.length}
+                    </p>
                   )}
                 </div>
 
@@ -559,8 +598,8 @@ export default function ModelDownloadPage() {
                   <input
                     type="text"
                     value={targetDir}
-                    onChange={e => setTargetDir(e.target.value)}
-                    placeholder={`${MODELS_DIR || 'MODELS_DIR'}/model-name`}
+                    onChange={(e) => setTargetDir(e.target.value)}
+                    placeholder={`${MODELS_DIR || "MODELS_DIR"}/model-name`}
                     className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-sm focus:border-indigo-500 focus:outline-none"
                   />
                 </div>
@@ -568,21 +607,23 @@ export default function ModelDownloadPage() {
                 {/* Disk check */}
                 {diskData && selectedModel.storage_bytes > diskData.free_bytes && (
                   <p className="text-xs text-red-500 mb-3">
-                    Insufficient disk space: need {formatBytes(selectedModel.storage_bytes)}, have {diskData.free_gb} GB free
+                    Insufficient disk space: need {formatBytes(selectedModel.storage_bytes)}, have {diskData.free_gb} GB
+                    free
                   </p>
                 )}
 
                 {/* VRAM check */}
                 {selectedModel.vram_gb > selectedGpuVram && (
                   <p className="text-xs text-red-500 mb-3">
-                    Model needs {selectedModel.vram_gb.toFixed(1)} GB but selected GPUs only have {selectedGpuVram.toFixed(1)} GB
+                    Model needs {selectedModel.vram_gb.toFixed(1)} GB but selected GPUs only have{" "}
+                    {selectedGpuVram.toFixed(1)} GB
                   </p>
                 )}
 
                 <button
                   onClick={startDownload}
                   disabled={
-                    downloadState !== 'idle' ||
+                    downloadState !== "idle" ||
                     !targetDir ||
                     selectedModel.vram_gb > selectedGpuVram ||
                     (diskData && selectedModel.storage_bytes > diskData.free_bytes)
@@ -597,5 +638,5 @@ export default function ModelDownloadPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

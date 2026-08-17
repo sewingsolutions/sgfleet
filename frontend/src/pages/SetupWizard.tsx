@@ -1,67 +1,67 @@
-import { useState, useCallback, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { copyToClipboard } from '../utils/copyToClipboard'
-import { useSetupStatus, useCompleteSetupMutation } from '../hooks/useSetup'
+import { useState, useCallback, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { copyToClipboard } from "../utils/copyToClipboard";
+import { useSetupStatus, useCompleteSetupMutation } from "../hooks/useSetup";
 
-const steps = ['Welcome', 'Admin Name', 'Base URL', 'HF Token', 'Complete']
+const steps = ["Welcome", "Admin Name", "Base URL", "HF Token", "Complete"];
 
 export default function SetupWizard() {
-  const navigate = useNavigate()
-  const [step, setStep] = useState(0)
-  const [adminName, setAdminName] = useState('')
-  const [baseUrl, setBaseUrl] = useState('')
-  const [hfToken, setHfToken] = useState('')
-  const [resultKey, setResultKey] = useState('')
-  const [keyCopied, setKeyCopied] = useState(false)
-  const [error, setError] = useState('')
+  const navigate = useNavigate();
+  const [step, setStep] = useState(0);
+  const [adminName, setAdminName] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [hfToken, setHfToken] = useState("");
+  const [resultKey, setResultKey] = useState("");
+  const [keyCopied, setKeyCopied] = useState(false);
+  const [error, setError] = useState("");
 
-  const { data: setupStatus } = useSetupStatus()
-  const completeMutation = useCompleteSetupMutation()
+  const { data: setupStatus } = useSetupStatus();
+  const completeMutation = useCompleteSetupMutation();
 
   // If setup is already complete, redirect to login.
   useEffect(() => {
     if (setupStatus?.setup_complete && !resultKey) {
-      navigate('/login', { replace: true })
+      navigate("/login", { replace: true });
     }
-  }, [setupStatus, resultKey, navigate])
+  }, [setupStatus, resultKey, navigate]);
 
   const canNext = useCallback(() => {
-    if (step === 1) return adminName.trim().length > 0
-    return true
-  }, [step, adminName])
+    if (step === 1) return adminName.trim().length > 0;
+    return true;
+  }, [step, adminName]);
 
   const handleNext = () => {
-    if (step < 4) setStep(step + 1)
-  }
+    if (step < 4) setStep(step + 1);
+  };
 
   const handleBack = () => {
-    if (step > 0) setStep(step - 1)
-  }
+    if (step > 0) setStep(step - 1);
+  };
 
   const handleComplete = async () => {
-    setError('')
+    setError("");
     try {
       const result = await completeMutation.mutateAsync({
         admin_name: adminName.trim(),
         base_url: baseUrl.trim(),
         hf_token: hfToken.trim() || undefined,
-      })
-      setResultKey(result.admin_api_key)
-      setStep(4)
+      });
+      setResultKey(result.admin_api_key);
+      setStep(4);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Setup failed')
+      setError(e instanceof Error ? e.message : "Setup failed");
     }
-  }
+  };
 
   const handleRedirect = () => {
-    navigate('/login', { replace: true })
-  }
+    navigate("/login", { replace: true });
+  };
 
   const copyKey = () => {
-    copyToClipboard(resultKey)
-    setKeyCopied(true)
-    setTimeout(() => setKeyCopied(false), 2000)
-  }
+    copyToClipboard(resultKey);
+    setKeyCopied(true);
+    setTimeout(() => setKeyCopied(false), 2000);
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-900">
@@ -78,26 +78,24 @@ export default function SetupWizard() {
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium transition-colors ${
                       i < step
-                        ? 'bg-emerald-600 text-white'
+                        ? "bg-emerald-600 text-white"
                         : i === step
-                          ? 'bg-indigo-600 text-white'
-                          : 'bg-slate-700 text-gray-400'
+                          ? "bg-indigo-600 text-white"
+                          : "bg-slate-700 text-gray-400"
                     }`}
                   >
-                    {i < step ? '✓' : i + 1}
+                    {i < step ? "✓" : i + 1}
                   </div>
                   <span className="text-[10px] text-gray-500 mt-1 hidden sm:block">{label}</span>
                 </div>
                 {i < steps.length - 1 && (
-                  <div className={`w-8 sm:w-12 h-px mx-1 ${i < step ? 'bg-emerald-600' : 'bg-slate-700'}`} />
+                  <div className={`w-8 sm:w-12 h-px mx-1 ${i < step ? "bg-emerald-600" : "bg-slate-700"}`} />
                 )}
               </div>
             ))}
           </div>
 
-          {error && (
-            <div className="bg-red-900/50 text-red-300 px-4 py-3 rounded mb-4 text-sm">{error}</div>
-          )}
+          {error && <div className="bg-red-900/50 text-red-300 px-4 py-3 rounded mb-4 text-sm">{error}</div>}
 
           {/* Step 0: Welcome */}
           {step === 0 && (
@@ -105,7 +103,9 @@ export default function SetupWizard() {
               <div>
                 <h2 className="text-xl font-semibold text-white mb-2">Welcome to SGFleet</h2>
                 <p className="text-gray-400 text-sm leading-relaxed">
-                  This wizard will help you configure your SGFleet instance. You&apos;ll create an admin account, set your base URL, and optionally configure a HuggingFace token. At the end, you&apos;ll receive an API key that you&apos;ll need to log in.
+                  This wizard will help you configure your SGFleet instance. You&apos;ll create an admin account, set
+                  your base URL, and optionally configure a HuggingFace token. At the end, you&apos;ll receive an API
+                  key that you&apos;ll need to log in.
                 </p>
               </div>
               <button
@@ -131,10 +131,7 @@ export default function SetupWizard() {
                 autoFocus
               />
               <div className="flex justify-end gap-2 pt-2">
-                <button
-                  onClick={handleBack}
-                  className="px-4 py-2 text-gray-400 hover:text-white text-sm transition"
-                >
+                <button onClick={handleBack} className="px-4 py-2 text-gray-400 hover:text-white text-sm transition">
                   Back
                 </button>
                 <button
@@ -162,19 +159,15 @@ export default function SetupWizard() {
                 className="w-full px-3 py-3 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:border-indigo-500 text-sm font-mono"
                 placeholder="https://api.example.com/v1"
               />
-              <p className="text-gray-500 text-xs">Example: <code className="bg-slate-900 px-1.5 py-0.5 rounded">https://your-server.com/v1</code></p>
+              <p className="text-gray-500 text-xs">
+                Example: <code className="bg-slate-900 px-1.5 py-0.5 rounded">https://your-server.com/v1</code>
+              </p>
               <div className="flex justify-between items-center pt-2">
-                <button
-                  onClick={() => setBaseUrl('')}
-                  className="text-xs text-gray-500 hover:text-gray-300 transition"
-                >
+                <button onClick={() => setBaseUrl("")} className="text-xs text-gray-500 hover:text-gray-300 transition">
                   Clear
                 </button>
                 <div className="flex gap-2">
-                  <button
-                    onClick={handleBack}
-                    className="px-4 py-2 text-gray-400 hover:text-white text-sm transition"
-                  >
+                  <button onClick={handleBack} className="px-4 py-2 text-gray-400 hover:text-white text-sm transition">
                     Back
                   </button>
                   <button
@@ -205,10 +198,7 @@ export default function SetupWizard() {
               <div className="flex justify-between items-center pt-2">
                 <span className="text-xs text-gray-500">Optional</span>
                 <div className="flex gap-2">
-                  <button
-                    onClick={handleBack}
-                    className="px-4 py-2 text-gray-400 hover:text-white text-sm transition"
-                  >
+                  <button onClick={handleBack} className="px-4 py-2 text-gray-400 hover:text-white text-sm transition">
                     Back
                   </button>
                   <button
@@ -229,25 +219,22 @@ export default function SetupWizard() {
               <div className="bg-slate-900 rounded p-4 space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-400">Admin Name</span>
-                  <span className="text-white">{adminName || '—'}</span>
+                  <span className="text-white">{adminName || "—"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">Base URL</span>
-                  <span className="text-white font-mono text-xs">{baseUrl || '—'}</span>
+                  <span className="text-white font-mono text-xs">{baseUrl || "—"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-400">HF Token</span>
-                  <span className="text-white">{hfToken ? '••••••' : '—'}</span>
+                  <span className="text-white">{hfToken ? "••••••" : "—"}</span>
                 </div>
               </div>
               <p className="text-gray-400 text-sm">
                 Clicking &quot;Complete Setup&quot; will create your admin account and generate an API key.
               </p>
               <div className="flex justify-between items-center pt-2">
-                <button
-                  onClick={handleBack}
-                  className="px-4 py-2 text-gray-400 hover:text-white text-sm transition"
-                >
+                <button onClick={handleBack} className="px-4 py-2 text-gray-400 hover:text-white text-sm transition">
                   Back
                 </button>
                 <button
@@ -255,7 +242,7 @@ export default function SetupWizard() {
                   disabled={completeMutation.isPending}
                   className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded text-white font-medium transition text-sm disabled:opacity-50"
                 >
-                  {completeMutation.isPending ? 'Setting up...' : 'Complete Setup'}
+                  {completeMutation.isPending ? "Setting up..." : "Complete Setup"}
                 </button>
               </div>
             </div>
@@ -278,7 +265,7 @@ export default function SetupWizard() {
                     onClick={copyKey}
                     className="px-3 py-3 bg-slate-700 hover:bg-slate-600 rounded text-white text-sm font-medium transition whitespace-nowrap"
                   >
-                    {keyCopied ? 'Copied!' : 'Copy'}
+                    {keyCopied ? "Copied!" : "Copy"}
                   </button>
                 </div>
               </div>
@@ -293,5 +280,5 @@ export default function SetupWizard() {
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,11 +1,11 @@
-import { useQuery } from '@tanstack/react-query'
-import { api } from '../api/client'
-import type { DashboardStats } from '../api/types'
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../api/client";
+import type { DashboardStats } from "../api/types";
 
 export function useDashboardStats() {
   return useQuery<DashboardStats, Error>({
-    queryKey: ['dashboardStats'],
+    queryKey: ["dashboardStats"],
     queryFn: () => api.getDashboardStats(),
     staleTime: 30000,
-  })
+  });
 }

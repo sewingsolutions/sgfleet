@@ -38,4 +38,3 @@ prometheus.remote_write "monitoring" {
 }
 EOF
 fi
-

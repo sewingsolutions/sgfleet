@@ -1,13 +1,13 @@
-import { useState, useCallback, type ReactNode } from 'react'
-import { ToastContext } from '../hooks/useToast'
+import { useState, useCallback, type ReactNode } from "react";
+import { ToastContext } from "../hooks/useToast";
 
 export default function ToastProvider({ children }: { children: ReactNode }) {
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState("");
 
   const showToast = useCallback((msg: string) => {
-    setMessage(msg)
-    setTimeout(() => setMessage(''), 2000)
-  }, [])
+    setMessage(msg);
+    setTimeout(() => setMessage(""), 2000);
+  }, []);
 
   return (
     <ToastContext.Provider value={showToast}>
@@ -18,5 +18,5 @@ export default function ToastProvider({ children }: { children: ReactNode }) {
         </div>
       )}
     </ToastContext.Provider>
-  )
+  );
 }

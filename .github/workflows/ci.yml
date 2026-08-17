@@ -86,6 +86,30 @@ jobs:
       - run: npm run build
         working-directory: frontend
 
+  frontend-format:
+    name: Frontend format check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run format:check
+        working-directory: frontend
+
+  shell-format:
+    name: Shell & Dockerfile format check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx prettier --check scripts/init.sh backend/scripts/entrypoint.sh backend/deploy.sh frontend/deploy.sh test.sh backend/Dockerfile frontend/Dockerfile docker-compose.yml telemetry/alloy/generate-config.sh
+
   dockerfile-lint-backend:
     name: Lint backend Dockerfile
     runs-on: ubuntu-latest

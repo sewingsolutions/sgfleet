@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+*.py
+*.pyi
+.env
+data/
+logs/
+*.db
+*.sqlite
+nginx.conf
+logrotate.conf

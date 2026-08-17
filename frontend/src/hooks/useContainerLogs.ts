@@ -1,143 +1,145 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import type { LogStreamEvent } from '../api/types'
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import type { LogStreamEvent } from "../api/types";
 
 export interface LogLine {
-  text: string
-  timestamp: string | null
-  content: string
-  level: 'ERROR' | 'WARNING' | 'INFO' | 'DEBUG' | 'TIMESTAMP' | 'NORMAL'
+  text: string;
+  timestamp: string | null;
+  content: string;
+  level: "ERROR" | "WARNING" | "INFO" | "DEBUG" | "TIMESTAMP" | "NORMAL";
 }
 
 export function classifyLine(raw: string): LogLine {
-  let timestamp: string | null = null
-  let content = raw
+  let timestamp: string | null = null;
+  let content = raw;
 
-  const tsMatch = raw.match(/^(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)\s(.*)/)
+  const tsMatch = raw.match(/^(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)\s(.*)/);
   if (tsMatch) {
-    timestamp = tsMatch[1]
-    content = tsMatch[2]
+    timestamp = tsMatch[1];
+    content = tsMatch[2];
   }
 
-  const upper = content.toUpperCase()
-  let level: LogLine['level'] = 'NORMAL'
-  if (upper.includes('ERROR')) level = 'ERROR'
-  else if (upper.includes('WARNING')) level = 'WARNING'
-  else if (upper.includes('INFO')) level = 'INFO'
-  else if (upper.includes('DEBUG')) level = 'DEBUG'
-  else if (content.match(/^\[\d{4}-\d{2}-\d{2}\s[\d:]+\]/)) level = 'TIMESTAMP'
+  const upper = content.toUpperCase();
+  let level: LogLine["level"] = "NORMAL";
+  if (upper.includes("ERROR")) level = "ERROR";
+  else if (upper.includes("WARNING")) level = "WARNING";
+  else if (upper.includes("INFO")) level = "INFO";
+  else if (upper.includes("DEBUG")) level = "DEBUG";
+  else if (content.match(/^\[\d{4}-\d{2}-\d{2}\s[\d:]+\]/)) level = "TIMESTAMP";
 
-  return { text: raw, timestamp, content, level }
+  return { text: raw, timestamp, content, level };
 }
 
 export function useContainerLogs(modelId: string, tail: number, active: boolean) {
-  const [lines, setLines] = useState<LogLine[]>([])
-  const [status, setStatus] = useState<'connecting' | 'streaming' | 'ended' | 'error'>('connecting')
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [startupError, setStartupError] = useState<string | null>(null)
-  const [startupErrorAt, setStartupErrorAt] = useState<string | null>(null)
-  const [reconnectKey, setReconnectKey] = useState(0)
-  const abortRef = useRef<AbortController | null>(null)
+  const [lines, setLines] = useState<LogLine[]>([]);
+  const [status, setStatus] = useState<"connecting" | "streaming" | "ended" | "error">("connecting");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [startupError, setStartupError] = useState<string | null>(null);
+  const [startupErrorAt, setStartupErrorAt] = useState<string | null>(null);
+  const [reconnectKey, setReconnectKey] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
 
-  const parseLine = useMemo(() => classifyLine, [])
+  const parseLine = useMemo(() => classifyLine, []);
 
   useEffect(() => {
-    if (!active) return
+    if (!active) return;
 
     if (abortRef.current) {
-      abortRef.current.abort()
+      abortRef.current.abort();
     }
 
-    setLines([])
-    setErrorMessage(null)
-    setStartupError(null)
-    setStartupErrorAt(null)
-    setStatus('connecting')
+    setLines([]);
+    setErrorMessage(null);
+    setStartupError(null);
+    setStartupErrorAt(null);
+    setStatus("connecting");
 
-    const abort = new AbortController()
-    abortRef.current = abort
+    const abort = new AbortController();
+    abortRef.current = abort;
 
-    const url = `/api/models/${encodeURIComponent(modelId)}/logs/stream?tail=${tail}`
+    const url = `/api/models/${encodeURIComponent(modelId)}/logs/stream?tail=${tail}`;
 
-    fetch(url, { credentials: 'same-origin', signal: abort.signal })
+    fetch(url, { credentials: "same-origin", signal: abort.signal })
       .then(async (response) => {
-        const reader = response.body?.getReader()
+        const reader = response.body?.getReader();
         if (!reader) {
-          setStatus('error')
-          setErrorMessage('Unable to read logs')
-          return
+          setStatus("error");
+          setErrorMessage("Unable to read logs");
+          return;
         }
 
-        setStatus('streaming')
-        const decoder = new TextDecoder()
-        let buffer = ''
+        setStatus("streaming");
+        const decoder = new TextDecoder();
+        let buffer = "";
 
         while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
+          const { done, value } = await reader.read();
+          if (done) break;
 
-          buffer += decoder.decode(value, { stream: true })
-          const lineSegments = buffer.split('\n\n')
-          buffer = lineSegments.pop() || ''
+          buffer += decoder.decode(value, { stream: true });
+          const lineSegments = buffer.split("\n\n");
+          buffer = lineSegments.pop() || "";
 
           // Collect all lines that arrived in this chunk, then flush once so a
           // burst becomes a single state update. Crucially we flush per-chunk
           // (not only every N lines) so trailing lines appear promptly while the
           // stream stays open — otherwise they'd sit buffered until the next
           // batch fills or the stream ends.
-          const batch: LogLine[] = []
-          let ended = false
+          const batch: LogLine[] = [];
+          let ended = false;
 
           for (const segment of lineSegments) {
-            const segLines = segment.split('\n')
+            const segLines = segment.split("\n");
             for (const line of segLines) {
-              if (!line.startsWith('data: ')) continue
+              if (!line.startsWith("data: ")) continue;
               try {
-                const event: LogStreamEvent = JSON.parse(line.slice(6))
-                if (event.type === 'line') {
-                  batch.push(parseLine(event.line))
-                } else if (event.type === 'eof') {
-                  ended = true
-                } else if (event.type === 'error') {
-                  if (batch.length > 0) setLines((prev) => [...prev, ...batch])
-                  setErrorMessage(event.message)
-                  setStatus('error')
-                  return
-                } else if (event.type === 'startup_error') {
-                  setStartupError(event.message)
-                  setStartupErrorAt(event.at ?? null)
+                const event: LogStreamEvent = JSON.parse(line.slice(6));
+                if (event.type === "line") {
+                  batch.push(parseLine(event.line));
+                } else if (event.type === "eof") {
+                  ended = true;
+                } else if (event.type === "error") {
+                  if (batch.length > 0) setLines((prev) => [...prev, ...batch]);
+                  setErrorMessage(event.message);
+                  setStatus("error");
+                  return;
+                } else if (event.type === "startup_error") {
+                  setStartupError(event.message);
+                  setStartupErrorAt(event.at ?? null);
                 }
-              } catch { /* skip malformed events */ }
+              } catch {
+                /* skip malformed events */
+              }
             }
           }
 
           if (batch.length > 0) {
-            setLines((prev) => [...prev, ...batch])
+            setLines((prev) => [...prev, ...batch]);
           }
           if (ended) {
-            setStatus('ended')
-            return
+            setStatus("ended");
+            return;
           }
         }
 
-        setStatus('ended')
+        setStatus("ended");
       })
       .catch((e) => {
-        if (e.name !== 'AbortError') {
-          setErrorMessage(e.message)
-          setStatus('error')
+        if (e.name !== "AbortError") {
+          setErrorMessage(e.message);
+          setStatus("error");
         }
-      })
+      });
 
     return () => {
-      abort.abort()
-    }
+      abort.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelId, tail, active, reconnectKey])
+  }, [modelId, tail, active, reconnectKey]);
 
   const reconnect = useCallback(() => {
-    setReconnectKey((k) => k + 1)
-  }, [])
+    setReconnectKey((k) => k + 1);
+  }, []);
 
-  return { lines, status, errorMessage, startupError, startupErrorAt, reconnect }
+  return { lines, status, errorMessage, startupError, startupErrorAt, reconnect };
 }
