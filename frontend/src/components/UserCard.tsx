@@ -170,6 +170,7 @@ export default function UserCard({
   };
 
   const handleRotate = async () => {
+    if (!(await confirmAction(`Rotate API key for "${user.name}"? The current key will be invalidated.`, true))) return;
     const result = await rotateKey(user.id);
     setShowKey(result.api_key);
   };
@@ -311,7 +312,7 @@ export default function UserCard({
         </button>
         <button
           onClick={handleRotate}
-          className="flex items-center gap-1.5 px-3 py-1 text-xs rounded transition bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+          className="flex items-center gap-1.5 px-3 py-1 text-xs rounded transition bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-200"
         >
           <RefreshCw className="w-3.5 h-3.5" />
           Rotate Key

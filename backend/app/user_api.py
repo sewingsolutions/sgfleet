@@ -1,3 +1,4 @@
+import asyncio
 import json
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
@@ -6,7 +7,8 @@ from fastapi import APIRouter, Request
 
 from . import metrics as real_metrics
 from .admin_api import build_opencode_config
-from .auth import _COOKIE_NAME, _USER_COOKIE_NAME
+from .auth import _COOKIE_NAME, _USER_COOKIE_NAME, require_user
+from .config import generate_key
 from .config_templates import (
     build_claude_code_config,
     build_cline_config,
@@ -24,7 +26,9 @@ from .db import (
     get_user_usage,
     is_setup_complete,
     load_admin_api_key,
+    rotate_key,
 )
+from .webhooks import notify as webhook_notify
 
 router = APIRouter(prefix="/api")
 
@@ -304,3 +308,14 @@ async def generate_user_config(request: Request):
 
     config = {"base_url": base, "api_key": raw_key, "model": model_alias, "client": client_type}
     return {"api_key": raw_key, "config": config, "config_json": json.dumps(config, indent=2)}
+
+
+@router.post("/user/rotate_key")
+async def rotate_user_key(request: Request):
+    await require_user(request)
+    user = request.state.user
+
+    new_key = generate_key()
+    await rotate_key(user["id"], new_key)
+    asyncio.create_task(webhook_notify("key_rotated", {"user_id": user["id"], "user_name": user["name"]}))
+    return {"api_key": new_key}
