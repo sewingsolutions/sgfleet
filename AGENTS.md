@@ -102,7 +102,7 @@ npx prettier --write scripts/init.sh backend/scripts/entrypoint.sh backend/deplo
 
 # Check formatting (no changes)
 cd frontend && npm run format:check
-npx prettier --check scripts/init.sh backend/scripts/entrypoint.sh backend/deploy.sh frontend/deploy.sh test.sh backend/Dockerfile frontend/Dockerfile docker-compose.yml models.json telemetry/alloy/generate-config.sh
+npx prettier --check scripts/init.sh backend/scripts/entrypoint.sh backend/deploy.sh frontend/deploy.sh test.sh backend/Dockerfile frontend/Dockerfile docker-compose.yml telemetry/alloy/generate-config.sh
 ```
 
 ## Testing

@@ -108,7 +108,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
-      - run: npx prettier --check scripts/init.sh backend/scripts/entrypoint.sh backend/deploy.sh frontend/deploy.sh test.sh backend/Dockerfile frontend/Dockerfile docker-compose.yml models.json telemetry/alloy/generate-config.sh
+      - run: npx prettier --check scripts/init.sh backend/scripts/entrypoint.sh backend/deploy.sh frontend/deploy.sh test.sh backend/Dockerfile frontend/Dockerfile docker-compose.yml telemetry/alloy/generate-config.sh
 
   dockerfile-lint-backend:
     name: Lint backend Dockerfile
