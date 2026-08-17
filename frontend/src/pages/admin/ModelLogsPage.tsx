@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
+import { ChevronLeft, AlertCircle } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../api/client'
-import { useContainerLogs } from '../hooks/useContainerLogs'
-import type { LogLine } from '../hooks/useContainerLogs'
+import { api } from '../../api/client'
+import { useContainerLogs } from '../../hooks/useContainerLogs'
+import type { LogLine } from '../../hooks/useContainerLogs'
 
 const levelColors = {
   ERROR: 'text-red-400',
@@ -20,16 +21,14 @@ function PageHeader({ modelName }: { modelName: string }) {
   return (
     <>
       <div className="mb-3">
-        <Link to="/models" className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
+        <Link to="/admin/models" className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition">
+          <ChevronLeft className="w-4 h-4" />
           Back to Models
         </Link>
       </div>
       <nav aria-label="Breadcrumb" className="mb-4 text-xs text-gray-500 dark:text-gray-400">
         <ol className="flex items-center gap-1.5">
-          <li><Link to="/models" className="hover:text-gray-800 dark:hover:text-gray-200 transition">Models</Link></li>
+          <li><Link to="/admin/models" className="hover:text-gray-800 dark:hover:text-gray-200 transition">Models</Link></li>
           <li aria-hidden>/</li>
           <li className="text-gray-800 dark:text-gray-200 font-medium">Logs: {modelName}</li>
         </ol>
@@ -99,9 +98,7 @@ export default function ModelLogsPage() {
       {startupError && (
         <div className="mb-4 p-3 sm:p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
           <div className="flex items-start gap-2">
-            <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
             <div className="min-w-0">
               <p className="text-sm font-medium text-red-800 dark:text-red-200">Container failed to start</p>
               <p className="mt-1 text-xs text-red-700 dark:text-red-300 font-mono break-all">{startupError}</p>

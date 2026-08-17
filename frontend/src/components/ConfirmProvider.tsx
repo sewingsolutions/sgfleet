@@ -1,4 +1,5 @@
 import { useState, useCallback, type ReactNode } from 'react'
+import { AlertTriangle, Info } from 'lucide-react'
 import { ConfirmContext } from '../hooks/useConfirm'
 
 export default function ConfirmProvider({ children }: { children: ReactNode }) {
@@ -26,15 +27,11 @@ export default function ConfirmProvider({ children }: { children: ReactNode }) {
             <div className="flex items-start gap-3 mb-4">
               {modal.danger ? (
                 <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center shrink-0">
-                  <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 3l9.5 16.5H2.5L12 3z" />
-                  </svg>
+                  <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400" />
                 </div>
               ) : (
                 <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
-                  <svg className="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-1.165 2.578 0l4.5 9.5a.75.75 0 01-.672 1.09h-9.63a.75.75 0 01-.672-1.09L8.228 9z" />
-                  </svg>
+                  <Info className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 </div>
               )}
               <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{modal.message}</p>

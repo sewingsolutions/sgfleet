@@ -1,21 +1,16 @@
-import { useGetSettingsDefaults, useUpdateSettingsDefaultsMutation } from '../hooks/useSettingsDefaults'
-import { useModelHealth, useModelHealthRefetch } from '../hooks/useModelHealth'
-import { useAuth } from '../context/AuthContext'
-import { useRef, useCallback, useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '../api/client'
-import { useToast } from '../hooks/useToast'
-import { useConfirm } from '../hooks/useConfirm'
-import type { Webhook, ModelConfig } from '../api/types'
-
-const formatUptime = (s: number) => {
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
-  if (h > 0) return `${h}h ${m}m`
-  if (m > 0) return `${m}m ${sec}s`
-  return `${sec}s`
-}
+import { useGetSettingsDefaults, useUpdateSettingsDefaultsMutation } from '../../hooks/useSettingsDefaults'
+import { useModelHealth, useModelHealthRefetch } from '../../hooks/useModelHealth'
+import { useAuth } from '../../context/AuthContext'
+import { useRef, useCallback, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../../api/client'
+import { useToast } from '../../hooks/useToast'
+import { useConfirm } from '../../hooks/useConfirm'
+import { copyToClipboard } from '../../utils/copyToClipboard'
+import { useWebhooks, useCreateWebhookMutation, useDeleteWebhookMutation } from '../../hooks/useWebhooks'
+import { useBaseUrl, useSetBaseUrlMutation } from '../../hooks/useBaseUrl'
+import { useHFToken, useSetHFTokenMutation } from '../../hooks/useHFToken'
+import { exportUsersFile, importUsersFromJson, exportDatabase, rotateAdminKey, formatUptime } from '../../services/settingsActions'
 
 export default function SettingsPage() {
   const { logout } = useAuth()
@@ -26,36 +21,24 @@ export default function SettingsPage() {
   const rateLimitRef = useRef<HTMLInputElement>(null)
   const concurrentRef = useRef<HTMLInputElement>(null)
   const costRef = useRef<HTMLInputElement>(null)
-  const [modelConfig, setModelConfig] = useState<ModelConfig | null>(null)
+  const { data: modelConfig } = useQuery({
+    queryKey: ['modelConfig'],
+    queryFn: () => api.getModelConfig(),
+  })
+  const { data: webhooks = [] } = useWebhooks()
+  const createWebhookMutation = useCreateWebhookMutation()
+  const deleteWebhookMutation = useDeleteWebhookMutation()
   const [importJson, setImportJson] = useState('')
   const [importLoading, setImportLoading] = useState(false)
   const [importResult, setImportResult] = useState<{ created: string[]; skipped: string[] } | null>(null)
   const [exportJson, setExportJson] = useState('')
   const [newAdminKey, setNewAdminKey] = useState('')
-  const [webhooks, setWebhooks] = useState<Webhook[]>([])
   const [newWebhookName, setNewWebhookName] = useState('')
   const [newWebhookUrl, setNewWebhookUrl] = useState('')
   const [newWebhookEvents, setNewWebhookEvents] = useState<string[]>([])
   const events = ['quota_warning', 'quota_exceeded', 'key_rotated', 'user_disabled', 'rate_limited_spike']
   const { data: health, isFetching: healthFetching } = useModelHealth()
   const refetchHealth = useModelHealthRefetch()
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const config = await api.getModelConfig()
-        setModelConfig(config)
-      } catch {
-        /* ignore */
-      }
-      try {
-        const hooks = await api.fetchGet('/api/webhooks')
-        setWebhooks((hooks as unknown as Webhook[]) || [])
-      } catch {
-        /* ignore */
-      }
-    })()
-  }, [])
 
   const handleSave = useCallback(async () => {
     const data: Record<string, number> = {}
@@ -66,24 +49,14 @@ export default function SettingsPage() {
   }, [updateDefaults])
 
   const handleExportUsers = async () => {
-    const res = await fetch('/admin/api/users', { credentials: 'same-origin' })
-    const users = await res.json()
-    const blob = new Blob([JSON.stringify(users, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'users-export.json'
-    a.click()
-    URL.revokeObjectURL(url)
+    await exportUsersFile()
   }
 
   const handleImportUsers = async () => {
     setImportResult(null)
     setImportLoading(true)
     try {
-      const parsed = JSON.parse(importJson)
-      const res = await api.fetchPost('/api/settings/import_users', parsed)
-      setImportResult(res as { created: string[]; skipped: string[] })
+      setImportResult(await importUsersFromJson(importJson))
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       setImportResult({ created: [], skipped: [`Error: ${msg}`] })
@@ -94,8 +67,7 @@ export default function SettingsPage() {
 
   const handleExportDb = async () => {
     try {
-      const res = await api.fetchPost('/api/settings/export_db', {})
-      setExportJson(String(res.json))
+      setExportJson(await exportDatabase())
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       showToast(`Export failed: ${msg}`)
@@ -105,8 +77,8 @@ export default function SettingsPage() {
   const handleRotateAdminKey = async () => {
     if (!await confirmAction('Rotate admin key? The CURRENT key will be invalidated immediately. Make sure to copy the new key!', true)) return
     try {
-      const res = await api.fetchPost('/api/settings/rotate_admin_key', {})
-      setNewAdminKey(String(res.new_key))
+      const res = await rotateAdminKey()
+      setNewAdminKey(res.newKey)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e)
       showToast(`Rotation failed: ${msg}`)
@@ -282,8 +254,8 @@ export default function SettingsPage() {
           <div className="mt-3 bg-gray-100 dark:bg-slate-900 border border-amber-500/30 rounded p-3 flex gap-2 items-center">
             <code className="flex-1 text-sm text-amber-700 dark:text-amber-300 font-mono break-all">{newAdminKey}</code>
             <button
-              onClick={async () => {
-                try { await navigator.clipboard.writeText(newAdminKey) } catch { document.execCommand('copy') }
+              onClick={() => {
+                copyToClipboard(newAdminKey)
                 setNewAdminKey('')
               }}
               className="px-3 py-1 bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 rounded text-sm transition shrink-0"
@@ -312,8 +284,7 @@ export default function SettingsPage() {
               </div>
               <button onClick={async () => {
                 if (!await confirmAction(`Delete webhook "${w.name}"?`, true)) return
-                api.fetchDelete(`/api/webhooks/${w.id}`)
-                setWebhooks(webhooks.filter(x => x.id !== w.id))
+                deleteWebhookMutation.mutate(w.id)
               }} className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-sm transition">
                 Delete
               </button>
@@ -344,18 +315,17 @@ export default function SettingsPage() {
             ))}
           </div>
           <button
-            onClick={async () => {
+            onClick={() => {
               if (!newWebhookName || !newWebhookUrl || newWebhookEvents.length === 0) return
-                const res = await api.fetchPost('/api/webhooks', { name: newWebhookName, url: newWebhookUrl, events: newWebhookEvents })
-                const created = res.created as { secret: string }
-                setWebhooks([...webhooks, { id: Date.now(), name: newWebhookName, url: newWebhookUrl, events: newWebhookEvents, is_active: true, secret: created.secret, created_at: new Date().toISOString() }])
+              createWebhookMutation.mutate({ name: newWebhookName, url: newWebhookUrl, events: newWebhookEvents })
               setNewWebhookName('')
               setNewWebhookUrl('')
               setNewWebhookEvents([])
             }}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-gray-900 dark:text-white text-sm transition"
+            disabled={createWebhookMutation.isPending}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-gray-900 dark:text-white text-sm transition disabled:opacity-50"
           >
-            Add Webhook
+            {createWebhookMutation.isPending ? 'Adding...' : 'Add Webhook'}
           </button>
         </div>
       </div>
@@ -374,22 +344,11 @@ export default function SettingsPage() {
 }
 
 function HFTokenSection() {
-  const queryClient = useQueryClient()
   const showToast = useToast()
   const [tokenValue, setTokenValue] = useState('')
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['download-hf-token'],
-    queryFn: api.getHFToken,
-  })
-
-  const saveMutation = useMutation({
-    mutationFn: api.setHFToken,
-    onSuccess: () => {
-      showToast('HF API token saved')
-      queryClient.invalidateQueries({ queryKey: ['download-hf-token'] })
-    },
-  })
+  const { data, isLoading, isError } = useHFToken()
+  const saveMutation = useSetHFTokenMutation()
 
   const hasToken = data?.has_token ?? false
 
@@ -397,6 +356,8 @@ function HFTokenSection() {
     <div>
       {isLoading ? (
         <p className="text-gray-500 dark:text-gray-400 text-sm">Loading...</p>
+      ) : isError ? (
+        <p className="text-red-500 dark:text-red-400 text-sm">Failed to load token status</p>
       ) : hasToken ? (
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -421,7 +382,12 @@ function HFTokenSection() {
           className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-gray-300 dark:border-slate-600 rounded text-gray-900 dark:text-white text-sm focus:border-indigo-500 focus:outline-none"
         />
         <button
-          onClick={() => { saveMutation.mutate(tokenValue); setTokenValue('') }}
+          onClick={() => {
+            saveMutation.mutate(tokenValue, {
+              onSuccess: () => { setTokenValue(''); showToast('HF API token saved') },
+              onError: (e) => showToast(e instanceof Error ? e.message : 'Failed to save HF token'),
+            })
+          }}
           disabled={saveMutation.isPending || !tokenValue}
           className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white text-sm disabled:opacity-50"
         >
@@ -433,21 +399,9 @@ function HFTokenSection() {
 }
 
 function BaseUrlSection() {
-  const queryClient = useQueryClient()
   const showToast = useToast()
-
-  const { data, isLoading } = useQuery({
-    queryKey: ['settings-base-url'],
-    queryFn: api.getBaseUrl,
-  })
-
-  const saveMutation = useMutation({
-    mutationFn: api.setBaseUrl,
-    onSuccess: () => {
-      showToast('Base URL saved')
-      queryClient.invalidateQueries({ queryKey: ['settings-base-url'] })
-    },
-  })
+  const { data, isLoading, isError } = useBaseUrl()
+  const saveMutation = useSetBaseUrlMutation()
 
   return (
     <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-3 sm:p-6 border border-gray-200 dark:border-slate-700 mb-3 sm:mb-6">
@@ -455,11 +409,18 @@ function BaseUrlSection() {
       <p className="text-gray-500 dark:text-gray-400 mb-3 sm:mb-4 text-xs sm:text-sm">External URL used in generated API configs (e.g. opencode.json). Clients will be configured to point to this address.</p>
       {isLoading ? (
         <p className="text-gray-500 dark:text-gray-400 text-sm">Loading...</p>
+      ) : isError ? (
+        <p className="text-red-500 dark:text-red-400 text-sm">Failed to load base URL</p>
       ) : (
         <form onSubmit={async (e) => {
           e.preventDefault()
           const input = e.currentTarget.elements.namedItem('base-url') as HTMLInputElement
-          if (input.value) saveMutation.mutate(input.value)
+          if (input.value) {
+            saveMutation.mutate(input.value, {
+              onSuccess: () => showToast('Base URL saved'),
+              onError: (err) => showToast(err instanceof Error ? err.message : 'Failed to save base URL'),
+            })
+          }
         }} className="flex gap-2">
           <input
             name="base-url"

@@ -1,31 +1,12 @@
-import { useEffect, useState } from 'react'
-import { api } from '../api/client'
-
-interface Commit {
-  sha: string
-  msg: string
-}
+import { useGitLog } from '../../hooks/useGitLog'
 
 export default function VersionPage() {
-  const [head, setHead] = useState<string>('loading...')
-  const [commits, setCommits] = useState<Commit[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data, isLoading, isError } = useGitLog()
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await api.getGitLog()
-        setHead(res.head || 'unknown')
-        setCommits(res.commits || [])
-      } catch {
-        setHead('error')
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [])
+  if (isLoading) return null
 
-  if (loading) return null
+  const head = isError ? 'error' : (data?.head || 'unknown')
+  const commits = data?.commits || []
 
   return (
     <div>

@@ -1,4 +1,4 @@
-import { useLogs, useLogLevel, useSetLogLevelMutation } from '../hooks/useLogs'
+import { useLogs, useLogLevel, useSetLogLevelMutation } from '../../hooks/useLogs'
 
 const levelColors = {
   DEBUG: 'bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-gray-300',

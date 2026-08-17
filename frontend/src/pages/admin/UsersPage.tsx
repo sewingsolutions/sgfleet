@@ -1,11 +1,13 @@
-import { useCallback, useState, useEffect } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { useGetUsers, useBulkUpdateMutation } from '../hooks/useUsers'
-import { useToast } from '../hooks/useToast'
-import AddUserForm from '../components/AddUserForm'
-import UserCard from '../components/UserCard'
-import { api } from '../api/client'
-import type { Model } from '../api/types'
+import { useCallback, useState } from 'react'
+import { RefreshCw } from 'lucide-react'
+import { useQueryClient, useQueries, useQuery } from '@tanstack/react-query'
+import { useGetUsers, useBulkUpdateMutation } from '../../hooks/useUsers'
+import { useToast } from '../../hooks/useToast'
+import AddUserForm from '../../components/AddUserForm'
+import UserCard from '../../components/UserCard'
+import { api } from '../../api/client'
+import type { Model } from '../../api/types'
+import { buildModelAccessMap, buildDefaultModelMap } from '../../services/userAccess'
 
 type UserFilter = 'all' | 'active' | 'inactive' | 'quota_exceeded'
 
@@ -18,9 +20,6 @@ export default function UsersPage() {
   const [filter, setFilter] = useState<UserFilter>('all')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [bulkMode, setBulkMode] = useState(false)
-  const [allModels, setAllModels] = useState<Model[]>([])
-  const [modelAccessMap, setModelAccessMap] = useState<Record<number, Model[]>>({})
-  const [defaultModelMap, setDefaultModelMap] = useState<Record<number, Model | null>>({})
   const queryClient = useQueryClient()
   const showToast = useToast()
   const refetchMs = INTERVALS[intervalIndex]
@@ -29,43 +28,37 @@ export default function UsersPage() {
   const { data: users = [], isLoading } = useGetUsers({
     refetchInterval: refetchMs || undefined,
   })
+
+  const { data: allModels = [] } = useQuery({
+    queryKey: ['models'],
+    queryFn: api.listModels,
+  })
+
   const handleCreated = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['users'] })
   }, [queryClient])
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const models = await api.listModels()
-        setAllModels(models)
-      } catch {
-        /* ignore */
-      }
-    })()
-  }, [])
+  // Batch per-user model access and default model queries
+  const userQueries = useQueries({
+    queries: users.map((u) => ({
+      queryKey: ['userModelAccess', u.id],
+      queryFn: () => api.getUserModelAccess(u.id),
+      select: (data: Model[]) => ({ access: data, userId: u.id }),
+      retry: false,
+    })),
+  })
 
-  useEffect(() => {
-    (async () => {
-      const accessMap: Record<number, Model[]> = {}
-      const defaultMap: Record<number, Model | null> = {}
-      await Promise.all(users.map(async (u) => {
-        try {
-          const access = await api.getUserModelAccess(u.id)
-          accessMap[u.id] = access
-        } catch {
-          accessMap[u.id] = []
-        }
-        try {
-          const dm = await api.getUserDefaultModel(u.id)
-          defaultMap[u.id] = dm
-        } catch {
-          defaultMap[u.id] = null
-        }
-      }))
-      setModelAccessMap(accessMap)
-      setDefaultModelMap(defaultMap)
-    })()
-  }, [users])
+  const defaultModelQueries = useQueries({
+    queries: users.map((u) => ({
+      queryKey: ['userDefaultModel', u.id],
+      queryFn: () => api.getUserDefaultModel(u.id),
+      select: (data: Model | null) => ({ model: data, userId: u.id }),
+      retry: false,
+    })),
+  })
+
+  const modelAccessMap = buildModelAccessMap(users, userQueries)
+  const defaultModelMap = buildDefaultModelMap(users, defaultModelQueries)
 
   const filtered = users.filter((u) => {
     if (search && !u.name.toLowerCase().includes(search.toLowerCase())) return false
@@ -156,9 +149,7 @@ export default function UsersPage() {
               </button>
             </div>
           )}
-          <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
+          <RefreshCw className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           <select
             value={intervalIndex}
             onChange={(e) => setIntervalIndex(Number(e.target.value))}
@@ -189,7 +180,7 @@ export default function UsersPage() {
               onDefaultModelChange={async (modelId) => {
                 try {
                   await api.setUserDefaultModel(u.id, modelId)
-                  setDefaultModelMap((prev) => ({ ...prev, [u.id]: modelId ? allModels.find((m) => m.model_id === modelId) ?? null : null }))
+                  queryClient.invalidateQueries({ queryKey: ['userDefaultModel', u.id] })
                   showToast(`Default model updated for ${u.name}`)
                 } catch (e) {
                   showToast(e instanceof Error ? e.message : 'Failed to update default model')

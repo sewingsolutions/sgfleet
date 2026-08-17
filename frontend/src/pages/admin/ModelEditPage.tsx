@@ -1,11 +1,13 @@
 import { useState, useMemo, useCallback } from 'react'
+import { Clock, X, ChevronDown, AlertTriangle, AlertCircle, ExternalLink, ChevronLeft } from 'lucide-react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '../api/client'
-import type { Model, LocalModel, DockerImagesResponse } from '../api/types'
-import { useToast } from '../hooks/useToast'
-import { parseFlags, serializeFlags, type EnvVar, type FlagPair } from '../utils/flags'
-import { SGLANG_FLAGS, SGLANG_FLAG_CATEGORIES, CONTEXT_LENGTH_PRESETS, MAX_OUTPUT_LENGTH_PRESETS } from '../utils/sglangFlags'
+import { api } from '../../api/client'
+import type { Model, LocalModel, DockerImagesResponse } from '../../api/types'
+import { useToast } from '../../hooks/useToast'
+import { buildModelPayload } from '../../services/modelActions'
+import { parseFlags, type EnvVar, type FlagPair } from '../../utils/flags'
+import { SGLANG_FLAGS, SGLANG_FLAG_CATEGORIES, CONTEXT_LENGTH_PRESETS, MAX_OUTPUT_LENGTH_PRESETS } from '../../utils/sglangFlags'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -46,9 +48,7 @@ function FieldHistoryDropdown({ modelId, field, currentText, onSelect }: {
         className="text-[11px] text-gray-400 dark:text-gray-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition cursor-pointer ml-1 flex items-center gap-0.5"
         title="Field history"
       >
-        <svg className="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
+        <Clock className="w-3.5 h-3.5 inline" />
         <span className="font-medium">v{currentVersion}</span>
       </button>
       {open && (
@@ -127,9 +127,7 @@ function KeyValueEditor({ items, onChange, label, placeholderKey, placeholderVal
               onChange={(e) => update(i, 'value', e.target.value)}
               className={`${inputCls} flex-1 ${label === 'Command Flags' ? 'font-mono' : ''}`} />
             <button type="button" onClick={() => remove(i)} className="p-1 text-gray-400 hover:text-red-500 transition shrink-0" aria-label="Remove">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="w-4 h-4" />
             </button>
           </div>
         ))}
@@ -157,9 +155,7 @@ function FlagCategorySection({ category, onSelect }: {
         <span className="font-medium">{category}</span>
         <span className="flex items-center gap-1.5">
           <span className="text-xs text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">{flags.length}</span>
-          <svg className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+          <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />
         </span>
       </button>
       {open && (
@@ -206,21 +202,12 @@ function useModelForm(model: Model | null) {
   const [saving, setSaving] = useState(false)
 
   const buildPayload = useCallback(() => {
-    const envObj: Record<string, string> = {}
-    envVars.forEach((ev) => { if (ev.key.trim()) envObj[ev.key.trim()] = ev.value })
-    return {
-      model_id: modelId, name, image, model_path: modelPath,
-      context_length: contextLength ? parseInt(contextLength) : undefined,
-      max_output_length: maxOutputLength ? parseInt(maxOutputLength) : undefined,
-      port: port ? parseInt(port) : 30000,
-      container_name: containerName.trim() || `sgfleet-${modelId}`,
-      container_alias: containerAlias.trim() || `sgfleet-${modelId}`,
-      model_alias: modelAlias,
-      grace_period: gracePeriod ? parseInt(gracePeriod) : 10,
-      gpu: gpu === 'auto' ? null : gpu,
-      environment: envObj,
-      command_flags: serializeFlags(commandFlags),
-    }
+    return buildModelPayload({
+      modelId, name, image, modelPath,
+      contextLength, maxOutputLength, port,
+      containerName, containerAlias, modelAlias,
+      gracePeriod, gpu, envVars, commandFlags,
+    })
   }, [modelId, name, image, modelPath, contextLength, maxOutputLength, port, containerName, containerAlias, modelAlias, gracePeriod, gpu, envVars, commandFlags])
 
   return {
@@ -293,15 +280,15 @@ export default function ModelEditPage() {
           if (!isNew && pending && model) {
             setRestartModal({ modelId: model.model_id, pending: true })
           } else {
-            navigate('/models')
+                  navigate('/admin/models')
           }
         }}
-        onCancel={() => navigate('/models')}
+        onCancel={() => navigate('/admin/models')}
       />
       {restartModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-          onClick={() => { setRestartModal(null); navigate('/models') }}
+                onClick={() => { setRestartModal(null); navigate('/admin/models') }}
         >
           <div
             className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 w-full max-w-md mx-4 p-6"
@@ -309,9 +296,7 @@ export default function ModelEditPage() {
           >
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
-                <svg className="w-5 h-5 text-amber-600 dark:text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M12 3l9.5 16.5H2.5L12 3z" />
-                </svg>
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
                 <h3 className="text-base font-semibold text-gray-900 dark:text-white">Restart container?</h3>
@@ -323,7 +308,7 @@ export default function ModelEditPage() {
             <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => { setRestartModal(null); navigate('/models') }}
+          onClick={() => { setRestartModal(null); navigate('/admin/models') }}
                 className="px-4 py-2 text-sm rounded bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 text-gray-700 dark:text-gray-300 transition"
               >
                 Later
@@ -338,7 +323,7 @@ export default function ModelEditPage() {
                     return
                   }
                   setRestartModal(null)
-                  navigate('/models')
+            navigate('/admin/models')
                 }}
                 className="px-4 py-2 text-sm rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition"
               >
@@ -442,9 +427,7 @@ function ModelEditForm({ model, isNew, existingModels, onSubmit, onCancel }: {
 
           {isNew && !showStep2 && (
             <div className="col-span-3 flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded p-2">
-              <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
+              <AlertCircle className="w-4 h-4 shrink-0" />
               Select a Docker image and local model path to continue. The remaining fields will appear below.
             </div>
           )}
@@ -566,9 +549,7 @@ function ModelEditForm({ model, isNew, existingModels, onSubmit, onCancel }: {
                     className="text-[11px] text-indigo-500 hover:text-indigo-400 dark:text-indigo-400 dark:hover:text-indigo-300 transition"
                     title="View SGLang server arguments documentation"
                   >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
+                    <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 </div>
                 <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-2">
@@ -593,9 +574,7 @@ function ModelEditForm({ model, isNew, existingModels, onSubmit, onCancel }: {
                         className={`${inputCls} flex-1 font-mono`} />
                       <button type="button" onClick={() => form.setCommandFlags(form.commandFlags.filter((_, idx) => idx !== i))}
                         className="p-1 text-gray-400 hover:text-red-500 transition shrink-0" aria-label="Remove">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   ))}
@@ -630,16 +609,14 @@ function PageHeader({ isNew, modelName }: { isNew: boolean; modelName?: string }
   return (
     <>
       <div className="mb-3">
-        <Link to="/models" className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
+        <Link to="/admin/models" className="inline-flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition">
+          <ChevronLeft className="w-4 h-4" />
           Back to Models
         </Link>
       </div>
       <nav aria-label="Breadcrumb" className="mb-4 text-xs text-gray-500 dark:text-gray-400">
         <ol className="flex items-center gap-1.5">
-          <li><Link to="/models" className="hover:text-gray-800 dark:hover:text-gray-200 transition">Models</Link></li>
+          <li><Link to="/admin/models" className="hover:text-gray-800 dark:hover:text-gray-200 transition">Models</Link></li>
           <li aria-hidden>/</li>
           <li className="text-gray-800 dark:text-gray-200 font-medium">{isNew ? 'New Model' : `Edit: ${modelName}`}</li>
         </ol>

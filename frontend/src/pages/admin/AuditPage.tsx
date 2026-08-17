@@ -1,4 +1,4 @@
-import { useAuditLog } from '../hooks/useAudit'
+import { useAuditLog } from '../../hooks/useAudit'
 
 const actionColors: Record<string, string> = {
   create_user: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',

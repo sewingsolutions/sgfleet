@@ -175,6 +175,9 @@ async def init_test_db():
             environment TEXT DEFAULT '{}',
             gpu TEXT DEFAULT 'auto',
             command_flags TEXT DEFAULT '[]',
+            pending_restart INTEGER DEFAULT 0,
+            startup_error TEXT DEFAULT NULL,
+            startup_error_at DATETIME DEFAULT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )""")
         await db.execute("""CREATE TABLE IF NOT EXISTS user_model_access (
@@ -184,9 +187,17 @@ async def init_test_db():
             FOREIGN KEY (user_id) REFERENCES users(id),
             FOREIGN KEY (model_id) REFERENCES models(id)
         )""")
+        await db.execute("""CREATE TABLE IF NOT EXISTS model_config_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            model_id TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            snapshot TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (model_id) REFERENCES models(model_id)
+        )""")
         with contextlib.suppress(Exception):
             await db.execute("ALTER TABLE users ADD COLUMN default_model_id INTEGER DEFAULT NULL REFERENCES models(id)")
-        await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("migration_version", "11"))
+        await db.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", ("migration_version", "15"))
         await db.commit()
 
 

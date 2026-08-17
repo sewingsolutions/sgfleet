@@ -50,7 +50,7 @@ describe('AddUserForm', () => {
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith(
-        '/admin/api/users',
+        '/api/users',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ name: 'bob' }),

@@ -21,7 +21,7 @@ describe('ProtectedRoute', () => {
   })
 
   test('unauthenticated user gets redirected to /login', async () => {
-    mockUseAuth.mockReturnValue({ loading: false, authenticated: false, setupComplete: true })
+    mockUseAuth.mockReturnValue({ loading: false, authenticated: false, setupComplete: true, role: null })
 
     const ProtectedRoute = (await import('../src/components/ProtectedRoute')).default
 
@@ -36,7 +36,7 @@ describe('ProtectedRoute', () => {
   })
 
   test('authenticated user sees children', async () => {
-    mockUseAuth.mockReturnValue({ loading: false, authenticated: true, setupComplete: true })
+    mockUseAuth.mockReturnValue({ loading: false, authenticated: true, setupComplete: true, role: 'admin' })
 
     const ProtectedRoute = (await import('../src/components/ProtectedRoute')).default
 
@@ -49,8 +49,23 @@ describe('ProtectedRoute', () => {
     expect(screen.getByTestId('children')).toBeInTheDocument()
   })
 
+  test('user role redirected to /user/', async () => {
+    mockUseAuth.mockReturnValue({ loading: false, authenticated: true, setupComplete: true, role: 'user' })
+
+    const ProtectedRoute = (await import('../src/components/ProtectedRoute')).default
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ProtectedRoute><span data-testid="children">Protected content</span></ProtectedRoute>
+      </QueryClientProvider>
+    )
+
+    expect(screen.getByTestId('navigate-to')).toHaveTextContent('/user/')
+    expect(screen.queryByTestId('children')).not.toBeInTheDocument()
+  })
+
   test('loading state shows loading message', async () => {
-    mockUseAuth.mockReturnValue({ loading: true, authenticated: false, setupComplete: true })
+    mockUseAuth.mockReturnValue({ loading: true, authenticated: false, setupComplete: true, role: null })
 
     const ProtectedRoute = (await import('../src/components/ProtectedRoute')).default
 
@@ -66,7 +81,7 @@ describe('ProtectedRoute', () => {
   })
 
   test('incomplete setup redirects to /setup', async () => {
-    mockUseAuth.mockReturnValue({ loading: false, authenticated: false, setupComplete: false })
+    mockUseAuth.mockReturnValue({ loading: false, authenticated: false, setupComplete: false, role: null })
 
     const ProtectedRoute = (await import('../src/components/ProtectedRoute')).default
 

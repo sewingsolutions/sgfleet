@@ -63,8 +63,8 @@ class TestBuildDockerRunCmd:
         assert "SYS_NICE" in cmd
         assert "--privileged" not in cmd
         assert model["image"] in cmd
-        # Command is now wrapped with sh -c tee wrapper
-        assert "sh" in cmd
+        # Command is now wrapped with bash -c tee wrapper
+        assert "bash" in cmd
         assert "-c" in cmd
         # The tee wrapper should contain sglang serve
         assert any("sglang" in str(x) for x in cmd)

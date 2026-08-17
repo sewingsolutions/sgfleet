@@ -69,13 +69,13 @@ vi.mock('chart.js', () => ({
 
 describe('Page smoke tests', () => {
   test('LoginPage renders without crash', async () => {
-    const LoginPage = (await import('../src/pages/LoginPage')).default
+    const LoginPage = (await import('../src/pages/admin/LoginPage')).default
     render(<LoginPage />)
     expect(screen.getByText('Sign In')).toBeInTheDocument()
   })
 
   test('UsersPage renders without crash', async () => {
-    const UsersPage = (await import('../src/pages/UsersPage')).default
+    const UsersPage = (await import('../src/pages/admin/UsersPage')).default
     render(
       <QueryClientProvider client={new QueryClient()}>
         <UsersPage />
@@ -86,7 +86,7 @@ describe('Page smoke tests', () => {
 
   test('MetricsPage renders without crash', async () => {
     const { ThemeProvider } = await import('../src/context/ThemeContext')
-    const MetricsPage = (await import('../src/pages/MetricsPage')).default
+    const MetricsPage = (await import('../src/pages/admin/MetricsPage')).default
     render(
       <ThemeProvider>
         <QueryClientProvider client={new QueryClient()}>
@@ -98,7 +98,7 @@ describe('Page smoke tests', () => {
   })
 
   test('SettingsPage renders without crash', async () => {
-    const SettingsPage = (await import('../src/pages/SettingsPage')).default
+    const SettingsPage = (await import('../src/pages/admin/SettingsPage')).default
     render(
       <QueryClientProvider client={new QueryClient()}>
         <SettingsPage />
@@ -110,7 +110,7 @@ describe('Page smoke tests', () => {
 
 
   test('AuditPage renders without crash', async () => {
-    const AuditPage = (await import('../src/pages/AuditPage')).default
+    const AuditPage = (await import('../src/pages/admin/AuditPage')).default
     render(
       <QueryClientProvider client={new QueryClient()}>
         <AuditPage />
@@ -120,7 +120,7 @@ describe('Page smoke tests', () => {
   })
 
   test('VersionPage renders without crash', async () => {
-    const VersionPage = (await import('../src/pages/VersionPage')).default
+    const VersionPage = (await import('../src/pages/admin/VersionPage')).default
     render(
       <QueryClientProvider client={new QueryClient()}>
         <VersionPage />

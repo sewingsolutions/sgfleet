@@ -731,22 +731,53 @@ async def stream_model_logs(request: Request, model_id: str, tail: int = 500):
     startup_error_at = m.get("startup_error_at")
     from .docker_manager import ModelError, read_persisted_logs, stream_container_logs
 
+    # Seconds to keep waiting for the container to appear before giving up and
+    # falling back to persisted logs. This covers the window during "Start" where
+    # the container is still being created (or its image is being pulled), so the
+    # live log view attaches as soon as the container comes up.
+    wait_deadline = int(os.environ.get("LOG_STREAM_WAIT_SECONDS", "180"))
+
     async def event_generator():
         # Send startup error first if present
         if startup_error:
             yield f"data: {json.dumps({'type': 'startup_error', 'message': startup_error, 'at': startup_error_at})}\n\n"
 
-        try:
-            async for line in stream_container_logs(container_name, tail):
-                yield f"data: {json.dumps({'type': 'line', 'line': line})}\n\n"
-            yield f"data: {json.dumps({'type': 'eof'})}\n\n"
-        except ModelError:
-            # Container not found — fall back to persisted log file
-            async for line in read_persisted_logs(container_name, tail):
-                yield f"data: {json.dumps({'type': 'line', 'line': line})}\n\n"
-            yield f"data: {json.dumps({'type': 'eof'})}\n\n"
+        import time
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+        deadline = time.monotonic() + wait_deadline
+        notified_waiting = False
+        while True:
+            try:
+                async for line in stream_container_logs(container_name, tail):
+                    yield f"data: {json.dumps({'type': 'line', 'line': line})}\n\n"
+                yield f"data: {json.dumps({'type': 'eof'})}\n\n"
+                return
+            except ModelError:
+                # Container not present yet. While the model is starting it may
+                # take a moment to be created (or the image may be pulling), so
+                # keep polling until the deadline before falling back.
+                if time.monotonic() >= deadline:
+                    break
+                if not notified_waiting:
+                    notified_waiting = True
+                    yield ("data: " + json.dumps({"type": "line", "line": "Waiting for container to start…"}) + "\n\n")
+                await asyncio.sleep(2)
+
+        # Container never appeared within the window — fall back to persisted logs
+        async for line in read_persisted_logs(container_name, tail):
+            yield f"data: {json.dumps({'type': 'line', 'line': line})}\n\n"
+        yield f"data: {json.dumps({'type': 'eof'})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            # Disable nginx/proxy buffering so lines are flushed immediately.
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/models/export")
@@ -869,6 +900,7 @@ async def clear_pending_restart_endpoint(request: Request, model_id: str):
 class GenerateConfigRequest(BaseModel):
     user_id: int
     rotate: bool = False
+    client: str = "opencode"
 
 
 def build_opencode_config(
@@ -937,13 +969,51 @@ async def generate_user_config(request: Request, user_id: int, body: GenerateCon
     from .hf_downloader import get_sgfleet_base_url
 
     base = await get_sgfleet_base_url()
-    config = build_opencode_config(raw_key, model_alias, model_name, context_length, max_output_length, base)
-    return {
-        "api_key": raw_key,
-        "rotated": body.rotate,
-        "config": config,
-        "config_json": json.dumps(config, indent=2),
-    }
+    client_type = body.client or "opencode"
+
+    from .config_templates import (
+        build_claude_code_config,
+        build_cline_config,
+        build_continue_config,
+        build_cursor_checklist,
+        build_interpreter_config,
+    )
+
+    if client_type == "opencode":
+        config = build_opencode_config(raw_key, model_alias, model_name, context_length, max_output_length, base)
+        return {
+            "api_key": raw_key,
+            "rotated": body.rotate,
+            "config": config,
+            "config_json": json.dumps(config, indent=2),
+        }
+
+    if client_type == "continue":
+        config_json = build_continue_config(raw_key, model_alias, model_name, base, context_length, max_output_length)
+        return {"api_key": raw_key, "rotated": body.rotate, "config": {}, "config_json": config_json}
+
+    if client_type == "cline":
+        config_json = build_cline_config(raw_key, model_alias, model_name, base, context_length, max_output_length)
+        return {"api_key": raw_key, "rotated": body.rotate, "config": {}, "config_json": config_json}
+
+    if client_type == "interpreter":
+        config_json = build_interpreter_config(
+            raw_key, model_alias, model_name, base, context_length, max_output_length
+        )
+        return {"api_key": raw_key, "rotated": body.rotate, "config": {}, "config_json": config_json}
+
+    if client_type == "cursor":
+        checklist = build_cursor_checklist(raw_key, model_alias, model_name, base, context_length, max_output_length)
+        return {"api_key": raw_key, "rotated": body.rotate, "config": {}, "checklist": checklist}
+
+    if client_type == "claude_code":
+        config_json = build_claude_code_config(
+            raw_key, model_alias, model_name, base, context_length, max_output_length
+        )
+        return {"api_key": raw_key, "rotated": body.rotate, "config": {}, "config_json": config_json}
+
+    config = {"base_url": base, "api_key": raw_key, "model": model_alias, "client": client_type}
+    return {"api_key": raw_key, "rotated": body.rotate, "config": config, "config_json": json.dumps(config, indent=2)}
 
 
 # --- System Endpoints ---
@@ -957,7 +1027,6 @@ async def get_git_log(request: Request):
     Commit log file (GIT_LOG.txt) is generated alongside it and bundled
     into the container image.
     """
-    await require_admin(request)
     app_dir = os.path.dirname(__file__)
     version_file = os.path.join(app_dir, "VERSION.txt")
     gitlog_file = os.path.join(app_dir, "GIT_LOG.txt")

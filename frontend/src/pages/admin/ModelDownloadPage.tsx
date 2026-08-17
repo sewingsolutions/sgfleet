@@ -1,25 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { ChevronLeft, CheckCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '../api/client'
-import type { HFModel, DiskUsage, SSEEvent } from '../api/types'
-import { useToast } from '../hooks/useToast'
-
-const formatBytes = (bytes: number) => {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 ** 2) return (bytes / 1024).toFixed(1) + ' KB'
-  if (bytes < 1024 ** 3) return (bytes / 1024 ** 2).toFixed(1) + ' MB'
-  return (bytes / 1024 ** 3).toFixed(1) + ' GB'
-}
+import { api } from '../../api/client'
+import type { HFModel, DiskUsage } from '../../api/types'
+import { useToast } from '../../hooks/useToast'
+import { parseDownloadSSE, validateDownload, formatBytes, formatParams } from '../../services/downloadService'
 
 const MODELS_DIR = (typeof window !== 'undefined' && (window as Window & { __MODELS_DIR__?: string }).__MODELS_DIR__) || ''
-
-const formatParams = (n: number) => {
-  if (n >= 1e12) return (n / 1e12).toFixed(1) + 'T'
-  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B'
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
-  return String(n)
-}
 
 export default function ModelDownloadPage() {
   const navigate = useNavigate()
@@ -60,6 +48,15 @@ export default function ModelDownloadPage() {
 
   const hasToken = tokenData?.has_token ?? false
   const totalVram = gpuData?.total_vram_gb ?? 0
+
+  // Model config creation mutation
+  const createConfigMutation = useMutation({
+    mutationFn: api.createModelConfig,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['models'] })
+      showToast('Model config created')
+    },
+  })
 
   // Check for active downloads on mount and resume
   useEffect(() => {
@@ -112,7 +109,7 @@ export default function ModelDownloadPage() {
         // Start SSE to follow progress (uses /follow, not /stream)
         const abort = new AbortController()
         abortRef.current = abort
-        const url = `/admin/api/download/follow?target_dir=${encodeURIComponent(job.target_dir)}`
+        const url = `/api/download/follow?target_dir=${encodeURIComponent(job.target_dir)}`
 
         fetch(url, { signal: abort.signal }).then(async (response) => {
           const reader = response.body?.getReader()
@@ -126,37 +123,32 @@ export default function ModelDownloadPage() {
             const lines = buffer.split('\n')
             buffer = lines.pop() || ''
             for (const line of lines) {
-              if (line.startsWith('data: ')) {
-                try {
-                  const event: SSEEvent & { progress?: number } = JSON.parse(line.slice(6))
-                  if (event.type === 'log') {
-                    setDownloadLogs((prev) => [...prev.slice(-50), event.line || ''])
-                    const pm = event.line?.match(/(\d+)%/)
-                    if (pm) setDownloadProgress(parseFloat(pm[1]))
-                  } else if (event.type === 'heartbeat') {
-                    if (event.progress !== undefined) setDownloadProgress(event.progress)
-                  } else if (event.type === 'complete') {
-                  setDownloadState('complete')
-                  setDownloadProgress(100)
-                  if (modelMatch && !cancelled) {
-                    await fetch('/admin/api/download/model-config', {
-                      method: 'POST',
-                      credentials: 'same-origin',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        hf_model: modelMatch,
-                        target_dir: job.target_dir,
-                        gpu_indices: selectedGpus,
-                      }),
-                    })
-                    queryClient.invalidateQueries({ queryKey: ['models'] })
-                  }
-                  showToast('Download complete!')
-                } else if (event.type === 'error') {
-                  setDownloadState('error')
-                  showToast(`Download failed: ${event.message}`)
-                  }
-                } catch { /* skip */ }
+              const parsed = parseDownloadSSE(line)
+              if (!parsed) continue
+              const { event, progress, downloadedMb } = parsed
+              if (event.type === 'log') {
+                setDownloadLogs(prev => [...prev.slice(-50), event.line || ''])
+                if (progress !== undefined) setDownloadProgress(progress)
+                if (downloadedMb !== undefined) {
+                  setDownloadLogs(prev => [...prev, `  → ${downloadedMb.toFixed(1)} MB downloaded`])
+                }
+              } else if (event.type === 'heartbeat') {
+                if (progress !== undefined) setDownloadProgress(progress)
+              } else if (event.type === 'complete') {
+                setDownloadState('complete')
+                setDownloadProgress(100)
+                if (modelMatch && !cancelled) {
+                  await createConfigMutation.mutateAsync({
+                    hf_model: modelMatch,
+                    target_dir: job.target_dir,
+                    gpu_indices: selectedGpus,
+                  })
+                  queryClient.invalidateQueries({ queryKey: ['models'] })
+                }
+                showToast('Download complete!')
+              } else if (event.type === 'error') {
+                setDownloadState('error')
+                showToast(`Download failed: ${event.message}`)
               }
             }
           }
@@ -206,28 +198,25 @@ export default function ModelDownloadPage() {
     },
   })
 
-  // Model config creation mutation
-  const createConfigMutation = useMutation({
-    mutationFn: api.createModelConfig,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['models'] })
-      showToast('Model config created')
-    },
-  })
+  const selectedGpuVram = selectedGpus.length
+    ? gpuData?.gpus?.filter(g => selectedGpus.includes(g.index)).reduce((s, g) => s + g.vram_gb, 0) ?? 0
+    : totalVram
 
   // Start SSE download
   const startDownload = useCallback(async () => {
     if (!selectedModel || !targetDir) return
 
     const pathExists = await api.checkModelPath(targetDir)
-    if (pathExists.exists) {
-      showToast('Model files already exist at this path')
-      return
-    }
-
     const disk = await api.getDiskSpace()
-    if (selectedModel.storage_bytes && disk.free_bytes < selectedModel.storage_bytes) {
-      showToast('Not enough disk space')
+    const validation = validateDownload({
+      pathExists: pathExists.exists,
+      storageBytes: selectedModel.storage_bytes || 0,
+      freeBytes: disk.free_bytes,
+      vramGb: selectedModel.vram_gb,
+      selectedVramGb: selectedGpuVram,
+    })
+    if (!validation.ok) {
+      showToast(validation.errors[0])
       return
     }
 
@@ -240,7 +229,7 @@ export default function ModelDownloadPage() {
 
     const gpuParam = selectedGpus.length ? `&gpus=${selectedGpus.join(',')}` : ''
     const expectedBytes = selectedModel.storage_bytes || 0
-    const url = `/admin/api/download/stream?model_id=${encodeURIComponent(selectedModel.id)}&target_dir=${encodeURIComponent(targetDir)}&expected_bytes=${expectedBytes}${gpuParam}`
+    const url = `/api/download/stream?model_id=${encodeURIComponent(selectedModel.id)}&target_dir=${encodeURIComponent(targetDir)}&expected_bytes=${expectedBytes}${gpuParam}`
 
     try {
       const response = await fetch(url, { signal: abort.signal })
@@ -259,40 +248,27 @@ export default function ModelDownloadPage() {
         buffer = lines.pop() || ''
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const event: SSEEvent = JSON.parse(line.slice(6))
-              if (event.type === 'log') {
-                setDownloadLogs(prev => [...prev.slice(-50), event.line || ''])
-                if (event.line) {
-                  const progressMatch = event.line.match(/(\d+)%/)
-                  if (progressMatch) {
-                    setDownloadProgress(parseFloat(progressMatch[1]))
-                  }
-                  const downloadedMatch = event.line.match(/Downloaded\s+([\d.]+)(MB|GB)/)
-                  if (downloadedMatch) {
-                    const val = parseFloat(downloadedMatch[1])
-                    const unit = downloadedMatch[2]
-                    const mb = unit === 'GB' ? val * 1024 : val
-                    setDownloadLogs(prev => [...prev, `  → ${mb.toFixed(1)} MB downloaded`])
-                  }
-                }
-              } else if (event.type === 'complete') {
-                setDownloadState('complete')
-                setDownloadProgress(100)
-                await createConfigMutation.mutateAsync({
-                  hf_model: selectedModel,
-                  target_dir: targetDir,
-                  gpu_indices: selectedGpus,
-                })
-                showToast('Download complete!')
-              } else if (event.type === 'error') {
-                setDownloadState('error')
-                showToast(`Download failed: ${event.message}`)
-              }
-            } catch {
-              // Skip malformed JSON
+          const parsed = parseDownloadSSE(line)
+          if (!parsed) continue
+          const { event, progress, downloadedMb } = parsed
+          if (event.type === 'log') {
+            setDownloadLogs(prev => [...prev.slice(-50), event.line || ''])
+            if (progress !== undefined) setDownloadProgress(progress)
+            if (downloadedMb !== undefined) {
+              setDownloadLogs(prev => [...prev, `  → ${downloadedMb.toFixed(1)} MB downloaded`])
             }
+          } else if (event.type === 'complete') {
+            setDownloadState('complete')
+            setDownloadProgress(100)
+            await createConfigMutation.mutateAsync({
+              hf_model: selectedModel,
+              target_dir: targetDir,
+              gpu_indices: selectedGpus,
+            })
+            showToast('Download complete!')
+          } else if (event.type === 'error') {
+            setDownloadState('error')
+            showToast(`Download failed: ${event.message}`)
           }
         }
       }
@@ -304,7 +280,7 @@ export default function ModelDownloadPage() {
         showToast(`Download error: ${msg}`)
       }
     }
-  }, [selectedModel, targetDir, selectedGpus, createConfigMutation, showToast])
+  }, [selectedModel, targetDir, selectedGpus, selectedGpuVram, createConfigMutation, showToast])
 
   // Cleanup mutation
   const cleanupMutation = useMutation({
@@ -319,21 +295,15 @@ export default function ModelDownloadPage() {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [downloadLogs])
 
-  const selectedGpuVram = selectedGpus.length
-    ? gpuData?.gpus?.filter(g => selectedGpus.includes(g.index)).reduce((s, g) => s + g.vram_gb, 0) ?? 0
-    : totalVram
-
   return (
     <div>
       {/* Breadcrumb */}
       <div className="mb-4">
         <button
-          onClick={() => navigate('/models')}
+          onClick={() => navigate('/admin/models')}
           className="text-indigo-600 dark:text-indigo-400 hover:underline text-sm flex items-center gap-1"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
+          <ChevronLeft className="w-4 h-4" />
           Back to Models
         </button>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
@@ -480,14 +450,12 @@ export default function ModelDownloadPage() {
             ) : downloadState === 'complete' ? (
               <div>
                 <div className="text-center py-4">
-                  <svg className="w-12 h-12 text-emerald-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+                  <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
                   <h3 className="text-lg font-bold text-gray-900 dark:text-white">Download Complete</h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Model downloaded to</p>
                   <code className="text-xs bg-gray-200 dark:bg-slate-700 px-2 py-1 rounded block mt-1 break-all">{targetDir}</code>
                   <div className="mt-4 flex gap-2 justify-center">
-                    <button onClick={() => navigate('/models')} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white text-sm">
+                    <button onClick={() => navigate('/admin/models')} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded text-white text-sm">
                       View Models
                     </button>
                     <button

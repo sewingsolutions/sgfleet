@@ -1,9 +1,13 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { afterEach } from 'vitest'
+
+afterEach(cleanup)
 
 const mockUpdateUser = vi.fn().mockResolvedValue({})
 const mockRotateKey = vi.fn().mockResolvedValue({ api_key: 'new-key-123' })
 const mockDeleteUser = vi.fn().mockResolvedValue({})
+const mockConfirm = vi.fn().mockResolvedValue(true)
 
 vi.mock('../src/hooks/useUsers', () => ({
   useUpdateUserMutation: () => ({ mutateAsync: mockUpdateUser }),
@@ -13,6 +17,10 @@ vi.mock('../src/hooks/useUsers', () => ({
 
 vi.mock('../src/hooks/useToast', () => ({
   useToast: () => vi.fn(),
+}))
+
+vi.mock('../src/hooks/useConfirm', () => ({
+  useConfirm: () => mockConfirm,
 }))
 
 vi.mock('../src/components/ConfigModal', () => ({
@@ -109,5 +117,95 @@ describe('UserCard', () => {
     await waitFor(() => {
       expect(screen.getByText('new-key-123')).toBeInTheDocument()
     })
+  })
+
+  test('config dropdown shows selected tool name', async () => {
+    render(<UserCard user={mockUser} />, { wrapper: makeWrapper() })
+
+    expect(screen.getByText('opencode')).toBeInTheDocument()
+  })
+
+  test('config dropdown opens and lists tools', async () => {
+    render(<UserCard user={mockUser} />, { wrapper: makeWrapper() })
+
+    const dropdownBtn = screen.getByText('opencode')
+    await fireEvent.click(dropdownBtn)
+
+    expect(screen.getByText('Continue.dev')).toBeInTheDocument()
+    expect(screen.getByText('Cline / Roo Code')).toBeInTheDocument()
+    expect(screen.getByText('Cursor')).toBeInTheDocument()
+    expect(screen.getByText('Claude Code')).toBeInTheDocument()
+  })
+
+  test('selecting a tool from dropdown calls onSelect callback', async () => {
+    render(<UserCard user={mockUser} />, { wrapper: makeWrapper() })
+
+    const dropdownBtn = screen.getByText('opencode')
+    await fireEvent.click(dropdownBtn)
+
+    expect(screen.getByText('Continue.dev')).toBeInTheDocument()
+  })
+
+  test('delete button calls delete mutation after confirmation', async () => {
+    render(<UserCard user={mockUser} />, { wrapper: makeWrapper() })
+
+    const deleteBtn = screen.getByText('Delete')
+    await fireEvent.click(deleteBtn)
+
+    expect(mockConfirm).toHaveBeenCalledWith('Delete alice?', true)
+    expect(mockDeleteUser).toHaveBeenCalledWith(1)
+  })
+
+  test('edit button expands edit panel', async () => {
+    render(<UserCard user={mockUser} />, { wrapper: makeWrapper() })
+
+    const editBtn = screen.getByTitle('Edit user')
+    await fireEvent.click(editBtn)
+
+    expect(screen.getByText('Edit settings')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('alice')).toBeInTheDocument()
+  })
+
+  test('edit panel contains all editable fields', async () => {
+    render(<UserCard user={mockUser} />, { wrapper: makeWrapper() })
+
+    const editBtn = screen.getByTitle('Edit user')
+    await fireEvent.click(editBtn)
+
+    expect(screen.getAllByText('Rate/s').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Concurrent').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Cost/req ($)')).toBeInTheDocument()
+    expect(screen.getByText('Daily quota')).toBeInTheDocument()
+    expect(screen.getByText('Email')).toBeInTheDocument()
+    expect(screen.getByText('Notes')).toBeInTheDocument()
+  })
+
+  test('save button in edit panel calls update mutation', async () => {
+    render(<UserCard user={mockUser} />, { wrapper: makeWrapper() })
+
+    const editBtn = screen.getByTitle('Edit user')
+    await fireEvent.click(editBtn)
+
+    const nameInput = screen.getByDisplayValue('alice')
+    await fireEvent.change(nameInput, { target: { value: 'bob' } })
+
+    await fireEvent.click(screen.getByText('Save'))
+
+    await waitFor(() => {
+      expect(mockUpdateUser).toHaveBeenCalled()
+    })
+  })
+
+  test('cancel button closes edit panel', async () => {
+    render(<UserCard user={mockUser} />, { wrapper: makeWrapper() })
+
+    const editBtn = screen.getByTitle('Edit user')
+    await fireEvent.click(editBtn)
+
+    expect(screen.getByText('Edit settings')).toBeInTheDocument()
+
+    await fireEvent.click(screen.getByText('Cancel'))
+
+    expect(screen.queryByText('Edit settings')).not.toBeInTheDocument()
   })
 })

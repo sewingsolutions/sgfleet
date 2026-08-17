@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { fmt } from '../lib/format'
-import { useUserStats, useUserSummary, useFleetStats } from '../hooks/useUserStats'
-import { useUserRequests } from '../hooks/useAudit'
-import { useChartTheme } from '../hooks/useChartTheme'
+import { fmt } from '../../lib/format'
+import { useUserStats, useUserSummary, useFleetStats } from '../../hooks/useUserStats'
+import { useUserRequests } from '../../hooks/useAudit'
+import { useChartTheme } from '../../hooks/useChartTheme'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -15,7 +15,7 @@ import {
   Filler,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
-import { useGetUsers } from '../hooks/useUsers'
+import { useGetUsers } from '../../hooks/useUsers'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
 

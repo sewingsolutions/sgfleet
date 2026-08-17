@@ -20,6 +20,7 @@ from .logging import setup_logging
 from .metrics_api import router as metrics_api_router
 from .model_registry import mark_not_ready, mark_ready, reload_cache, set_ready_ids
 from .prometheus_metrics import handler as prometheus_handler
+from .user_api import router as user_api_router
 
 logger = setup_logging()
 
@@ -77,9 +78,13 @@ class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint):
         start = time.monotonic()
         request_id = request.headers.get("x-request-id", "")
-        user = await authenticate_user(request)
-        user_name = user["name"] if user else None
         ip = (request.client and request.client.host) or ""
+        if request.url.path.startswith("/v1/"):
+            user = await authenticate_user(request)
+            user_name = user["name"] if user else None
+        else:
+            user = None
+            user_name = None
 
         try:
             response = await call_next(request)
@@ -212,3 +217,4 @@ def prometheus_metrics():
 app.include_router(prom_router)
 
 app.include_router(admin_ui_router)
+app.include_router(user_api_router)

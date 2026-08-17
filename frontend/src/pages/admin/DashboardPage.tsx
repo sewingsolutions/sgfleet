@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../api/client'
-import type { DashboardStats } from '../api/types'
+import { Boxes, TrendingUp, AlertCircle, Users, Clock, EyeOff } from 'lucide-react'
+import { api } from '../../api/client'
+import type { DashboardStats } from '../../api/types'
 
 const card = 'relative overflow-hidden rounded-xl p-5 sm:p-6 border transition-shadow hover:shadow-md'
 const cardBg = 'bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700'
@@ -111,9 +112,7 @@ export default function DashboardPage() {
           value={stats.total_models}
           color="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"
           icon={
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
+            <Boxes className="w-6 h-6" />
           }
           subtitle={`${stats.active_models} active`}
         />
@@ -122,9 +121,7 @@ export default function DashboardPage() {
           value={formatNumber(stats.requests_24h)}
           color="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400"
           icon={
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
+            <TrendingUp className="w-6 h-6" />
           }
         />
         <StatCard
@@ -132,9 +129,7 @@ export default function DashboardPage() {
           value={formatNumber(stats.errors_24h)}
           color={stats.errors_24h > 0 ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'}
           icon={
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-            </svg>
+            <AlertCircle className="w-6 h-6" />
           }
         />
         <StatCard
@@ -142,9 +137,7 @@ export default function DashboardPage() {
           value={stats.total_users}
           color="bg-violet-50 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400"
           icon={
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-            </svg>
+            <Users className="w-6 h-6" />
           }
           subtitle={`${stats.active_users} active`}
         />
@@ -153,9 +146,7 @@ export default function DashboardPage() {
           value={stats.median_latency_ms > 0 ? `${stats.median_latency_ms}ms` : '—'}
           color="bg-sky-50 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400"
           icon={
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6l4 2m6-2a10 10 0 11-20 0 10 10 0 0120 0z" />
-            </svg>
+            <Clock className="w-6 h-6" />
           }
         />
         <StatCard
@@ -163,9 +154,7 @@ export default function DashboardPage() {
           value={formatNumber(stats.rate_limited_24h)}
           color={stats.rate_limited_24h > 0 ? 'bg-orange-50 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400' : 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'}
           icon={
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-            </svg>
+            <EyeOff className="w-6 h-6" />
           }
         />
       </div>

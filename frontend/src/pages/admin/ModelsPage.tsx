@@ -1,10 +1,13 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { RefreshCw, X, ChevronDown, Loader2, Check } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '../api/client'
-import type { Model, User, ModelHealth } from '../api/types'
-import { useToast } from '../hooks/useToast'
-import { useConfirm } from '../hooks/useConfirm'
+import { api } from '../../api/client'
+import type { Model, User, ModelHealth } from '../../api/types'
+import { useToast } from '../../hooks/useToast'
+import { useConfirm } from '../../hooks/useConfirm'
+import { formatTestResult } from '../../services/modelActions'
+import { downloadJson, normalizeImportJson } from '../../services/importExport'
 
 const statusColor = (s?: string) => {
   if (s === 'running') return 'bg-emerald-500'
@@ -166,13 +169,7 @@ export default function ModelsPage() {
 
   const handleExport = async () => {
     const r = await api.exportModels()
-    const blob = new Blob([r.json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'models.json'
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadJson(r.json, 'models.json')
     showToast('Models exported')
   }
 
@@ -185,14 +182,7 @@ export default function ModelsPage() {
   }
 
   const handleExportSingle = (m: Model) => {
-    const json = JSON.stringify({ models: [m] }, null, 2)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${m.model_id}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadJson(JSON.stringify({ models: [m] }, null, 2), `${m.model_id}.json`)
     showToast(`Exported ${m.name}`)
   }
 
@@ -201,12 +191,7 @@ export default function ModelsPage() {
     if (!file) return
     const text = await file.text()
     try {
-      const parsed = JSON.parse(text)
-      const json = Array.isArray(parsed)
-        ? JSON.stringify({ models: parsed })
-        : parsed.models
-          ? text
-          : JSON.stringify({ models: [parsed] })
+      const json = normalizeImportJson(text)
       await importModels(json)
       showToast(`Imported model for ${m.name}`)
     } catch (err) {
@@ -243,18 +228,25 @@ export default function ModelsPage() {
 
   const handleStart = async (m: Model) => {
     setBusy((p) => ({ ...p, [m.model_id]: 'starting' }))
-    showToast(`Starting ${m.name}… (this may take up to a few minutes while weights load)`)
+    showToast(`Starting ${m.name}… opening live logs (weights may take a few minutes to load)`)
     const t0 = Date.now()
-    try {
-      await startModel(m.model_id)
-      const secs = Math.round((Date.now() - t0) / 1000)
-      showToast(`${m.name} started and ready in ${secs}s`)
-      refreshInvalidate()
-    } catch (e) {
-      showToast(`Start failed for ${m.name}: ${(e as Error).message}`)
-    } finally {
-      setBusy((p) => ({ ...p, [m.model_id]: null }))
-    }
+    // Fire the start request but don't block on it — the backend keeps the HTTP
+    // request open until the health check passes (up to several minutes). Navigate
+    // to the live logs view immediately so startup progress is visible, and report
+    // the outcome via toast when the request eventually resolves.
+    startModel(m.model_id)
+      .then(() => {
+        const secs = Math.round((Date.now() - t0) / 1000)
+        showToast(`${m.name} started and ready in ${secs}s`)
+      })
+      .catch((e) => {
+        showToast(`Start failed for ${m.name}: ${(e as Error).message}`)
+      })
+      .finally(() => {
+        setBusy((p) => ({ ...p, [m.model_id]: null }))
+        refreshInvalidate()
+      })
+    openLogs(m)
   }
 
   const handleStop = async (m: Model) => {
@@ -306,31 +298,21 @@ export default function ModelsPage() {
     try {
       const r = await api.testModel(m.model_id)
       const elapsedMs = r.latency_ms ?? Date.now() - t0
-      if (r.success) {
-        const usage = r.usage ? ` · ${r.usage.prompt_tokens ?? '?'}→${r.usage.completion_tokens ?? '?'} tok` : ''
-        const finish = r.finish_reason ? ` · finish=${r.finish_reason}` : ''
-        const header = `${r.model || m.model_id} · ${elapsedMs}ms${usage}${finish}`
-        setTestOutput((p) => ({
-          ...p,
-          [m.model_id]: { ok: true, text: `${header}\n\n${r.content || '(empty response)'}` },
-        }))
-      } else {
-        setTestOutput((p) => ({
-          ...p,
-          [m.model_id]: { ok: false, text: `HTTP ${r.status_code ?? '?'} — ${r.error || 'unknown error'}` },
-        }))
-      }
+      setTestOutput((p) => ({
+        ...p,
+        [m.model_id]: formatTestResult(r, m.model_id, elapsedMs),
+      }))
     } catch (e) {
       setTestOutput((p) => ({ ...p, [m.model_id]: { ok: false, text: `Error: ${(e as Error).message}` } }))
     }
     setTesting((p) => ({ ...p, [m.model_id]: false }))
   }
 
-  const openEdit = (m: Model) => navigate(`/models/${encodeURIComponent(m.model_id)}/edit`)
-  const openLogs = (m: Model) => navigate(`/models/${encodeURIComponent(m.model_id)}/logs`)
-  const openAdd = () => navigate('/models/new')
+  const openEdit = (m: Model) => navigate(`/admin/models/${encodeURIComponent(m.model_id)}/edit`)
+  const openLogs = (m: Model) => navigate(`/admin/models/${encodeURIComponent(m.model_id)}/logs`)
+  const openAdd = () => navigate('/admin/models/new')
   const handleDuplicate = (m: Model) =>
-    navigate('/models/new', { state: { duplicateFrom: m.model_id } })
+    navigate('/admin/models/new', { state: { duplicateFrom: m.model_id } })
 
   const handleSaveUsers = async (modelId: string, userIds: number[]) => {
     await setModelUsers({ modelId, userIds })
@@ -367,7 +349,7 @@ export default function ModelsPage() {
             Add Model
           </button>
           <button
-            onClick={() => navigate('/models/download')}
+            onClick={() => navigate('/admin/models/download')}
             className="px-3 py-1.5 text-xs rounded transition bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
           >
             Download from HuggingFace
@@ -386,14 +368,7 @@ export default function ModelsPage() {
           />
         </div>
         <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
+          <RefreshCw className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           <select
             value={intervalIdx}
             onChange={(e) => setIntervalIdx(Number(e.target.value))}
@@ -447,9 +422,7 @@ export default function ModelsPage() {
                         </div>
                         {m.pending_restart && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
+                            <RefreshCw className="w-3.5 h-3.5" />
                             Restart pending
                             <button
                               onClick={async () => {
@@ -473,9 +446,7 @@ export default function ModelsPage() {
                               className="ml-1 text-amber-500 hover:text-amber-700 dark:hover:text-amber-300"
                               title="Dismiss"
                             >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
+                              <X className="w-3 h-3" />
                             </button>
                           </span>
                         )}
@@ -609,9 +580,7 @@ export default function ModelsPage() {
                         }}
                         className="absolute top-1 right-1 p-0.5 rounded text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition z-10"
                       >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <X className="w-3.5 h-3.5" />
                       </button>
                       <div
                         className={`p-2 pr-6 rounded text-xs font-mono whitespace-pre-wrap max-h-60 overflow-y-auto ${
@@ -631,14 +600,7 @@ export default function ModelsPage() {
                     className="w-full px-4 py-2 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 flex items-center justify-center gap-1 transition"
                   >
                     {expandedRows.has(m.model_id) ? 'Hide' : 'Show'} user access
-                    <svg
-                      className={`w-3 h-3 transition ${expandedRows.has(m.model_id) ? 'rotate-180' : ''}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                    <ChevronDown className={`w-3 h-3 transition ${expandedRows.has(m.model_id) ? "rotate-180" : ""}`} />
                   </button>
                 </div>
                 {expandedRows.has(m.model_id) && (
@@ -687,9 +649,7 @@ export default function ModelsPage() {
                   onClick={() => setJsonModalId(null)}
                   className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
@@ -722,10 +682,7 @@ function ToggleSwitch({ on, onChange, disabled = false }: { on: boolean; onChang
 function Spinner({ label }: { label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300">
-      <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-      </svg>
+      <Loader2 className="w-3.5 h-3.5 animate-spin" />
       {label}
     </span>
   )
@@ -813,9 +770,7 @@ function UserAccessPanel({
                 }`}
               >
                 {selectedIds.has(u.id) && (
-                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                  </svg>
+                  <Check className="w-3 h-3 text-white" />
                 )}
               </span>
               <span className="truncate">{u.name}</span>
