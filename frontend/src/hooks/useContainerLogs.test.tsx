@@ -120,6 +120,37 @@ describe('useContainerLogs SSE handling', () => {
     expect(result.current.errorMessage).toBe('connection lost')
   })
 
+  it('flushes trailing lines while the stream stays open (no eof)', async () => {
+    // Regression: previously lines were only flushed to state every 50 lines
+    // or on eof/error. With a live `docker logs -f` stream that stays open,
+    // trailing lines below the batch threshold never appeared in the UI.
+    let controller!: ReadableStreamDefaultController<Uint8Array>
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) {
+        controller = c
+      },
+    })
+    const response = new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response))
+
+    const { result, unmount } = renderHook(() => useContainerLogs('model-1', 5000, true))
+
+    await act(async () => {
+      controller.enqueue(encoder.encode('data: {"type":"line","line":"line 1"}\n\n'))
+      controller.enqueue(encoder.encode('data: {"type":"line","line":"line 2"}\n\n'))
+      controller.enqueue(encoder.encode('data: {"type":"line","line":"line 3"}\n\n'))
+      await new Promise(r => setTimeout(r, 50))
+    })
+
+    // All three lines must be visible even though there is no eof and the
+    // count is well under the internal batch size.
+    expect(result.current.lines.map((l) => l.content)).toEqual(['line 1', 'line 2', 'line 3'])
+    expect(result.current.status).toBe('streaming')
+
+    unmount()
+  })
+
   it('handles startup_error events', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(createSSEResponse([
       'data: {"type":"startup_error","message":"GPU not found","at":"2024-01-15T10:30:00Z"}',

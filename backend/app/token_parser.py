@@ -31,7 +31,9 @@ def extract_usage_from_body(body: bytes | str) -> dict:
 def extract_usage_from_sse(body: bytes | str) -> dict:
     """Extract usage from a streaming (SSE) response body.
 
-    Parses the final `data:` chunk that contains the usage object.
+    Parses `data:` chunks for a usage object. Some model backends (e.g. SGLang)
+    include usage in the final chunk alongside the last choice, while others send
+    a dedicated usage-only chunk.
     Returns {"prompt_tokens": int, "completion_tokens": int, "total_tokens": int} or zeros.
     """
     try:
@@ -39,12 +41,15 @@ def extract_usage_from_sse(body: bytes | str) -> dict:
         usage_data = None
         for line in text.split("\n"):
             if line.startswith("data: "):
+                payload = line[6:].strip()
+                if not payload:
+                    continue
                 try:
-                    data = json.loads(line[6:])
-                    if "usage" in data:
-                        usage_data = data["usage"]
+                    data = json.loads(payload)
                 except json.JSONDecodeError:
                     continue
+                if "usage" in data and isinstance(data["usage"], dict):
+                    usage_data = data["usage"]
         if usage_data:
             return {
                 "prompt_tokens": usage_data.get("prompt_tokens", 0),

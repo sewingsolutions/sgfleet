@@ -57,7 +57,7 @@ export function useContainerLogs(modelId: string, tail: number, active: boolean)
     const abort = new AbortController()
     abortRef.current = abort
 
-    const url = `/admin/api/models/${encodeURIComponent(modelId)}/logs/stream?tail=${tail}`
+    const url = `/api/models/${encodeURIComponent(modelId)}/logs/stream?tail=${tail}`
 
     fetch(url, { credentials: 'same-origin', signal: abort.signal })
       .then(async (response) => {
@@ -71,8 +71,6 @@ export function useContainerLogs(modelId: string, tail: number, active: boolean)
         setStatus('streaming')
         const decoder = new TextDecoder()
         let buffer = ''
-        const batch: LogLine[] = []
-        let batchCount = 0
 
         while (true) {
           const { done, value } = await reader.read()
@@ -82,6 +80,14 @@ export function useContainerLogs(modelId: string, tail: number, active: boolean)
           const lineSegments = buffer.split('\n\n')
           buffer = lineSegments.pop() || ''
 
+          // Collect all lines that arrived in this chunk, then flush once so a
+          // burst becomes a single state update. Crucially we flush per-chunk
+          // (not only every N lines) so trailing lines appear promptly while the
+          // stream stays open — otherwise they'd sit buffered until the next
+          // batch fills or the stream ends.
+          const batch: LogLine[] = []
+          let ended = false
+
           for (const segment of lineSegments) {
             const segLines = segment.split('\n')
             for (const line of segLines) {
@@ -90,24 +96,10 @@ export function useContainerLogs(modelId: string, tail: number, active: boolean)
                 const event: LogStreamEvent = JSON.parse(line.slice(6))
                 if (event.type === 'line') {
                   batch.push(parseLine(event.line))
-                  batchCount++
-                  if (batchCount >= 50) {
-                    setLines((prev) => [...prev, ...batch])
-                    batch.length = 0
-                    batchCount = 0
-                  }
                 } else if (event.type === 'eof') {
-                  if (batch.length > 0) {
-                    setLines((prev) => [...prev, ...batch])
-                    batch.length = 0
-                  }
-                  setStatus('ended')
-                  return
+                  ended = true
                 } else if (event.type === 'error') {
-                  if (batch.length > 0) {
-                    setLines((prev) => [...prev, ...batch])
-                    batch.length = 0
-                  }
+                  if (batch.length > 0) setLines((prev) => [...prev, ...batch])
                   setErrorMessage(event.message)
                   setStatus('error')
                   return
@@ -118,11 +110,16 @@ export function useContainerLogs(modelId: string, tail: number, active: boolean)
               } catch { /* skip malformed events */ }
             }
           }
+
+          if (batch.length > 0) {
+            setLines((prev) => [...prev, ...batch])
+          }
+          if (ended) {
+            setStatus('ended')
+            return
+          }
         }
 
-        if (batch.length > 0) {
-          setLines((prev) => [...prev, ...batch])
-        }
         setStatus('ended')
       })
       .catch((e) => {

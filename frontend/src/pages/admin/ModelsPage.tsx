@@ -228,18 +228,25 @@ export default function ModelsPage() {
 
   const handleStart = async (m: Model) => {
     setBusy((p) => ({ ...p, [m.model_id]: 'starting' }))
-    showToast(`Starting ${m.name}… (this may take up to a few minutes while weights load)`)
+    showToast(`Starting ${m.name}… opening live logs (weights may take a few minutes to load)`)
     const t0 = Date.now()
-    try {
-      await startModel(m.model_id)
-      const secs = Math.round((Date.now() - t0) / 1000)
-      showToast(`${m.name} started and ready in ${secs}s`)
-      refreshInvalidate()
-    } catch (e) {
-      showToast(`Start failed for ${m.name}: ${(e as Error).message}`)
-    } finally {
-      setBusy((p) => ({ ...p, [m.model_id]: null }))
-    }
+    // Fire the start request but don't block on it — the backend keeps the HTTP
+    // request open until the health check passes (up to several minutes). Navigate
+    // to the live logs view immediately so startup progress is visible, and report
+    // the outcome via toast when the request eventually resolves.
+    startModel(m.model_id)
+      .then(() => {
+        const secs = Math.round((Date.now() - t0) / 1000)
+        showToast(`${m.name} started and ready in ${secs}s`)
+      })
+      .catch((e) => {
+        showToast(`Start failed for ${m.name}: ${(e as Error).message}`)
+      })
+      .finally(() => {
+        setBusy((p) => ({ ...p, [m.model_id]: null }))
+        refreshInvalidate()
+      })
+    openLogs(m)
   }
 
   const handleStop = async (m: Model) => {

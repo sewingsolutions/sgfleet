@@ -159,7 +159,9 @@ def build_docker_run_cmd(model: dict, is_primary: bool = False) -> list[str]:
     tee_cmd = f"set -o pipefail; exec {' '.join(sglang_args)} 2>&1 | tee -a '{log_path}'"
 
     cmd.append(image)
-    cmd.extend(["sh", "-c", tee_cmd])
+    # Use bash (not sh) because `set -o pipefail` is a bash builtin; the
+    # container's /bin/sh is dash, which errors with "Illegal option -o pipefail".
+    cmd.extend(["bash", "-c", tee_cmd])
 
     return cmd
 
