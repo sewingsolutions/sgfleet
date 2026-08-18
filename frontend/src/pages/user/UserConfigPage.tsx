@@ -1,7 +1,11 @@
 import { useState, useCallback } from "react";
+import { RefreshCw } from "lucide-react";
 import UserLayout from "../../components/UserLayout";
-import CodeBlock from "../../components/CodeBlock";
+import ConfigDisplay from "../../components/ConfigDisplay";
 import { useGenerateConfig } from "../../hooks/useGenerateConfig";
+import { useConfirm } from "../../hooks/useConfirm";
+import { useToast } from "../../hooks/useToast";
+import { api } from "../../api/client";
 import { copyToClipboard } from "../../utils/copyToClipboard";
 import { tools } from "../../config/tools";
 import type { UserConfigResponse, CursorChecklistItem } from "../../api/types";
@@ -25,14 +29,6 @@ const Card = ({
   onGenerate: () => void;
   onClose: () => void;
 }) => {
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-
-  const copyValue = (text: string, idx: number) => {
-    copyToClipboard(text);
-    setCopiedIndex(idx);
-    setTimeout(() => setCopiedIndex(null), 2000);
-  };
-
   return (
     <div className="bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 p-6 flex flex-col">
       <h3 className="font-bold text-lg mb-1">{tool.name}</h3>
@@ -49,16 +45,6 @@ const Card = ({
       {visible && result && !error && (
         <div className="flex justify-end gap-2 mt-2">
           <button
-            onClick={() => {
-              if (tool.configType === "code" && result.config_json) {
-                copyToClipboard(result.config_json);
-              }
-            }}
-            className="px-3 py-1 bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 rounded text-sm transition"
-          >
-            Copy
-          </button>
-          <button
             onClick={onClose}
             className="px-3 py-1 bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 rounded text-sm transition"
           >
@@ -74,36 +60,7 @@ const Card = ({
       )}
 
       {visible && result && !error && (
-        <div className="mt-4 space-y-4">
-          {tool.configType === "code" && result.config_json && (
-            <CodeBlock code={result.config_json} language={tool.language} />
-          )}
-        </div>
-      )}
-
-      {visible && checklist && checklist.length > 0 && (
-        <div className="mt-4 space-y-3">
-          {checklist.map((item, idx) => (
-            <div key={idx}>
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {idx + 1}. {item.step}
-              </p>
-              {item.value && (
-                <div className="flex gap-2">
-                  <code className="flex-1 p-2 bg-gray-50 dark:bg-slate-900 rounded border border-gray-200 dark:border-slate-700 font-mono text-sm break-all">
-                    {item.value}
-                  </code>
-                  <button
-                    onClick={() => copyValue(item.value, idx)}
-                    className="px-3 py-1 bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 rounded text-sm transition shrink-0"
-                  >
-                    {copiedIndex === idx ? "Copied!" : "Copy"}
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+        <ConfigDisplay configJson={result.config_json} checklist={checklist} tool={tool} showApiKey={false} />
       )}
     </div>
   );
@@ -118,7 +75,10 @@ export default function UserConfigPage() {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
   const [copiedToken, setCopiedToken] = useState(false);
+  const [rotating, setRotating] = useState(false);
 
+  const confirmAction = useConfirm();
+  const showToast = useToast();
   const { mutate: generateConfig } = useGenerateConfig();
 
   const handleGenerate = useCallback(
@@ -158,6 +118,22 @@ export default function UserConfigPage() {
     setVisible((prev) => ({ ...prev, [clientId]: false }));
   }, []);
 
+  const handleRotateKey = useCallback(async () => {
+    if (!(await confirmAction("Rotate your API key? The current key will be invalidated immediately.", true))) return;
+    setRotating(true);
+    try {
+      const res = await api.user.rotateKey();
+      setApiKey(res.api_key);
+      setResults({});
+      setChecklists({});
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Failed to rotate key";
+      showToast(msg);
+    } finally {
+      setRotating(false);
+    }
+  }, [confirmAction, showToast]);
+
   return (
     <UserLayout>
       <h1 className="text-2xl font-bold mb-6">Config Generator</h1>
@@ -196,7 +172,15 @@ export default function UserConfigPage() {
             ) : (
               <p className="text-sm text-gray-500 dark:text-gray-400">Generate a config below to see your token.</p>
             )}
-            <div className="flex justify-end mt-3">
+            <div className="flex justify-between items-center mt-3">
+              <button
+                onClick={handleRotateKey}
+                disabled={rotating}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm transition text-white"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${rotating ? "animate-spin" : ""}`} />
+                {rotating ? "Rotating..." : "Rotate Key"}
+              </button>
               <button
                 onClick={() => setShowToken(false)}
                 className="px-3 py-1 bg-gray-200 dark:bg-slate-700 hover:bg-gray-300 dark:hover:bg-slate-600 rounded text-sm transition"

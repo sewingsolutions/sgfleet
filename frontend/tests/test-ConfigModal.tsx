@@ -1,12 +1,18 @@
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 
+const mockConfirm = vi.fn().mockResolvedValue(true);
+
 vi.mock("../src/hooks/useToast", () => ({
   useToast: () => vi.fn(),
 }));
 
+vi.mock("../src/hooks/useConfirm", () => ({
+  useConfirm: () => mockConfirm,
+}));
+
 const mockGenerateConfig = vi.fn().mockResolvedValue({
   config_json: '{"endpoint": "http://localhost"}',
-  api_key: "sk-rotated-key",
+  api_key: "sk-test-key",
   rotated: false,
 });
 
@@ -19,82 +25,85 @@ vi.mock("../src/api/client", () => ({
 describe("ConfigModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGenerateConfig.mockResolvedValue({
+      config_json: '{"endpoint": "http://localhost"}',
+      api_key: "sk-test-key",
+      rotated: false,
+    });
   });
 
-  test("renders without model selection", async () => {
+  test("renders header with user name", async () => {
     const ConfigModal = (await import("../src/components/ConfigModal")).default;
-    render(<ConfigModal userId={1} userName="alice" onClose={vi.fn()} />);
+    render(<ConfigModal userId={1} userName="alice" clientType="opencode" onClose={vi.fn()} />);
 
     expect(screen.getByText("Generate config for")).toBeInTheDocument();
     expect(screen.getByText("alice")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Generate Config" })).toBeInTheDocument();
-    // Tool dropdown should be present
-    expect(screen.getByRole("combobox")).toBeInTheDocument();
   });
 
-  test("displays rotate option checkbox", async () => {
+  test("shows tool name when clientType is provided", async () => {
     const ConfigModal = (await import("../src/components/ConfigModal")).default;
-    render(<ConfigModal userId={1} userName="alice" onClose={vi.fn()} />);
+    render(<ConfigModal userId={1} userName="alice" clientType="cline" onClose={vi.fn()} />);
 
-    expect(screen.getByText("Rotate API key (generates a new key)")).toBeInTheDocument();
+    expect(screen.getByText("Cline / Roo Code")).toBeInTheDocument();
   });
 
-  test("submits config generation request", async () => {
-    const onClose = vi.fn();
+  test("shows loading spinner on mount", async () => {
     const ConfigModal = (await import("../src/components/ConfigModal")).default;
-    render(<ConfigModal userId={1} userName="alice" onClose={onClose} />);
+    const { container } = render(<ConfigModal userId={1} userName="alice" clientType="opencode" onClose={vi.fn()} />);
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Generate Config" })).toBeEnabled();
-    });
+    expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+  });
 
-    await fireEvent.click(screen.getByRole("button", { name: "Generate Config" }));
+  test("auto-loads config on mount", async () => {
+    const ConfigModal = (await import("../src/components/ConfigModal")).default;
+    render(<ConfigModal userId={1} userName="alice" clientType="opencode" onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(mockGenerateConfig).toHaveBeenCalledWith(1, false, "opencode");
     });
-
-    await waitFor(() => {
-      expect(screen.getByText("opencode config:")).toBeInTheDocument();
-    });
   });
 
-  test("handles rotate option", async () => {
+  test("displays API key after generation", async () => {
+    const ConfigModal = (await import("../src/components/ConfigModal")).default;
+    render(<ConfigModal userId={1} userName="alice" clientType="opencode" onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("sk-test-key")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Current API Key:")).toBeInTheDocument();
+  });
+
+  test("displays rotated API key label when key was rotated", async () => {
     mockGenerateConfig.mockResolvedValue({
-      config_json: '{"endpoint": "http://localhost"}',
-      api_key: "sk-rotated-key",
+      config_json: "{}",
+      api_key: "sk-new",
       rotated: true,
     });
 
     const ConfigModal = (await import("../src/components/ConfigModal")).default;
-    render(<ConfigModal userId={1} userName="alice" onClose={vi.fn()} />);
+    render(<ConfigModal userId={1} userName="alice" clientType="opencode" onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Generate Config" })).toBeEnabled();
-    });
-
-    const rotateCheckbox = screen.getByLabelText("Rotate API key (generates a new key)");
-    await fireEvent.click(rotateCheckbox);
-    expect(rotateCheckbox).toBeChecked();
-
-    await fireEvent.click(screen.getByRole("button", { name: "Generate Config" }));
-
-    await waitFor(() => {
-      expect(mockGenerateConfig).toHaveBeenCalledWith(1, true, "opencode");
+      expect(screen.getByText(/Rotated API Key/)).toBeInTheDocument();
     });
   });
 
-  test("sends selected tool type to API", async () => {
+  test("has Copy Key button after generation", async () => {
     const ConfigModal = (await import("../src/components/ConfigModal")).default;
-    render(<ConfigModal userId={2} userName="bob" onClose={vi.fn()} />);
-
-    const select = screen.getByRole("combobox");
-    await fireEvent.change(select, { target: { value: "cline" } });
-
-    await fireEvent.click(screen.getByRole("button", { name: "Generate Config" }));
+    render(<ConfigModal userId={1} userName="alice" clientType="opencode" onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(mockGenerateConfig).toHaveBeenCalledWith(2, false, "cline");
+      expect(screen.getByText("Copy Key")).toBeInTheDocument();
+    });
+  });
+
+  test("shows Copy and Download buttons for code config", async () => {
+    const ConfigModal = (await import("../src/components/ConfigModal")).default;
+    render(<ConfigModal userId={1} userName="alice" clientType="opencode" onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Copy")).toBeInTheDocument();
+      expect(screen.getByText("Download")).toBeInTheDocument();
     });
   });
 
@@ -111,8 +120,6 @@ describe("ConfigModal", () => {
     const ConfigModal = (await import("../src/components/ConfigModal")).default;
     render(<ConfigModal userId={1} userName="alice" clientType="cursor" onClose={vi.fn()} />);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Generate Config" }));
-
     await waitFor(() => {
       expect(screen.getByText("1. Step one")).toBeInTheDocument();
       expect(screen.getByText("2. Step two")).toBeInTheDocument();
@@ -124,9 +131,7 @@ describe("ConfigModal", () => {
     mockGenerateConfig.mockRejectedValue(new Error("Something broke"));
 
     const ConfigModal = (await import("../src/components/ConfigModal")).default;
-    render(<ConfigModal userId={1} userName="alice" onClose={vi.fn()} />);
-
-    await fireEvent.click(screen.getByRole("button", { name: "Generate Config" }));
+    render(<ConfigModal userId={1} userName="alice" clientType="opencode" onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText("Something broke")).toBeInTheDocument();
@@ -138,96 +143,57 @@ describe("ConfigModal", () => {
     expect(screen.queryByText("Something broke")).not.toBeInTheDocument();
   });
 
-  test("displays API key after generation", async () => {
+  test("shows Rotate Key button after generation", async () => {
+    const ConfigModal = (await import("../src/components/ConfigModal")).default;
+    render(<ConfigModal userId={1} userName="alice" clientType="opencode" onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Rotate Key")).toBeInTheDocument();
+    });
+  });
+
+  test("rotate key triggers confirmation and reloads config", async () => {
     mockGenerateConfig.mockResolvedValue({
       config_json: '{"endpoint": "http://localhost"}',
       api_key: "sk-rotated-key",
-      rotated: false,
-    });
-
-    const ConfigModal = (await import("../src/components/ConfigModal")).default;
-    render(<ConfigModal userId={1} userName="alice" onClose={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Generate Config" })).toBeEnabled();
-    });
-
-    await fireEvent.click(screen.getByRole("button", { name: "Generate Config" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("sk-rotated-key")).toBeInTheDocument();
-    });
-    expect(screen.getByText("Current API Key:")).toBeInTheDocument();
-  });
-
-  test("displays rotated API key label when key was rotated", async () => {
-    mockGenerateConfig.mockResolvedValue({
-      config_json: "{}",
-      api_key: "sk-new",
       rotated: true,
     });
 
     const ConfigModal = (await import("../src/components/ConfigModal")).default;
-    render(<ConfigModal userId={1} userName="alice" onClose={vi.fn()} />);
-
-    await fireEvent.click(screen.getByRole("button", { name: "Generate Config" }));
+    render(<ConfigModal userId={1} userName="alice" clientType="opencode" onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Rotated API Key/)).toBeInTheDocument();
+      expect(screen.getByText("Rotate Key")).toBeInTheDocument();
+    });
+
+    await fireEvent.click(screen.getByText("Rotate Key"));
+
+    expect(mockConfirm).toHaveBeenCalledWith("Rotate API key? The current key will be invalidated immediately.", true);
+
+    await waitFor(() => {
+      expect(mockGenerateConfig).toHaveBeenCalledWith(1, true, "opencode");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("sk-rotated-key")).toBeInTheDocument();
     });
   });
 
-  test("has Copy Key button after generation", async () => {
+  test("calls onClose when clicking backdrop", async () => {
+    const onClose = vi.fn();
     const ConfigModal = (await import("../src/components/ConfigModal")).default;
-    render(<ConfigModal userId={1} userName="alice" onClose={vi.fn()} />);
+    render(<ConfigModal userId={1} userName="alice" clientType="opencode" onClose={onClose} />);
 
-    await fireEvent.click(screen.getByRole("button", { name: "Generate Config" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("Copy Key")).toBeInTheDocument();
-    });
+    await fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalled();
   });
 
-  test("shows Copy and Download buttons for code config", async () => {
+  test("sends correct clientType to API", async () => {
     const ConfigModal = (await import("../src/components/ConfigModal")).default;
-    render(<ConfigModal userId={1} userName="alice" onClose={vi.fn()} />);
-
-    await fireEvent.click(screen.getByRole("button", { name: "Generate Config" }));
+    render(<ConfigModal userId={2} userName="bob" clientType="cline" onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Copy")).toBeInTheDocument();
-      expect(screen.getByText("Download")).toBeInTheDocument();
-    });
-  });
-
-  test("generating button shows loading state", async () => {
-    const ConfigModal = (await import("../src/components/ConfigModal")).default;
-    render(<ConfigModal userId={1} userName="alice" onClose={vi.fn()} />);
-
-    await fireEvent.click(screen.getByRole("button", { name: "Generate Config" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("Generating...")).toBeInTheDocument();
-    });
-  });
-
-  test("preselects tool when clientType prop is provided", async () => {
-    const ConfigModal = (await import("../src/components/ConfigModal")).default;
-    render(<ConfigModal userId={1} userName="alice" clientType="cline" onClose={vi.fn()} />);
-
-    const select = screen.getByRole("combobox");
-    expect(select).toHaveValue("cline");
-  });
-
-  test("shows tool description after selection", async () => {
-    const ConfigModal = (await import("../src/components/ConfigModal")).default;
-    render(<ConfigModal userId={1} userName="alice" onClose={vi.fn()} />);
-
-    const select = screen.getByRole("combobox");
-    await fireEvent.change(select, { target: { value: "cline" } });
-
-    await waitFor(() => {
-      expect(screen.getByText(/VS Code settings/)).toBeInTheDocument();
+      expect(mockGenerateConfig).toHaveBeenCalledWith(2, false, "cline");
     });
   });
 });

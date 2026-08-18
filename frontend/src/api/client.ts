@@ -289,5 +289,6 @@ export const api = {
     getQuota: () => userApiFetch<UserQuota>("/user/quota"),
     generateConfig: (client: string = "opencode") =>
       userApiFetch<UserConfigResponse>("/user/config", { method: "POST", body: JSON.stringify({ client }) }),
+    rotateKey: () => userApiFetch<{ api_key: string }>("/user/rotate_key", { method: "POST" }),
   },
 };
