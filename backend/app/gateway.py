@@ -51,8 +51,13 @@ def _get_bearer_token(request: Request) -> str | None:
     return None
 
 
+def _get_x_api_key(request: Request) -> str | None:
+    x_api_key = request.headers.get("x-api-key", "")
+    return x_api_key or None
+
+
 async def authenticate_user(request: Request):
-    token = _get_bearer_token(request)
+    token = _get_bearer_token(request) or _get_x_api_key(request)
     if not token:
         return None
     user = await get_user_by_token(token)
@@ -159,19 +164,42 @@ def _determine_target_endpoint(body: bytes) -> tuple[str | None, str | None]:
     return (None, None)
 
 
+_ANTHROPIC_ERROR_TYPES = {
+    401: "authentication_error",
+    429: "rate_limit_error",
+    502: "api_error",
+    503: "api_error",
+}
+
+
+def _anthropic_error_body(status_code: int, message: str) -> dict:
+    return {"type": "error", "error": {"type": _ANTHROPIC_ERROR_TYPES[status_code], "message": message}}
+
+
+def _rejection_body(request: Request, status_code: int, message: str, default_body) -> dict:
+    if request.url.path == "/v1/messages" and status_code in _ANTHROPIC_ERROR_TYPES:
+        return _anthropic_error_body(status_code, message)
+    return default_body
+
+
 async def proxy_request(request: Request):
     from .db import is_setup_complete
 
     if not await is_setup_complete():
         return JSONResponse(
             status_code=503,
-            content={
-                "error": {
-                    "message": "System setup not complete",
-                    "type": "setup_required",
-                    "code": "setup_required",
-                }
-            },
+            content=_rejection_body(
+                request,
+                503,
+                "System setup not complete",
+                {
+                    "error": {
+                        "message": "System setup not complete",
+                        "type": "setup_required",
+                        "code": "setup_required",
+                    }
+                },
+            ),
         )
 
     user = await authenticate_user(request)
@@ -198,7 +226,9 @@ async def proxy_request(request: Request):
         )
         return JSONResponse(
             status_code=401,
-            content={"detail": "Invalid or missing API key"},
+            content=_rejection_body(
+                request, 401, "Invalid or missing API key", {"detail": "Invalid or missing API key"}
+            ),
             headers={"X-Request-ID": request_id},
         )
 
@@ -225,7 +255,7 @@ async def proxy_request(request: Request):
         )
         return JSONResponse(
             status_code=429,
-            content={"detail": "Rate limit exceeded"},
+            content=_rejection_body(request, 429, "Rate limit exceeded", {"detail": "Rate limit exceeded"}),
             headers={"X-Request-ID": request_id},
         )
 
@@ -252,7 +282,9 @@ async def proxy_request(request: Request):
         )
         return JSONResponse(
             status_code=429,
-            content={"detail": "Too many concurrent requests"},
+            content=_rejection_body(
+                request, 429, "Too many concurrent requests", {"detail": "Too many concurrent requests"}
+            ),
             headers={"X-Request-ID": request_id},
         )
 
@@ -290,7 +322,7 @@ async def proxy_request(request: Request):
             )
             return JSONResponse(
                 status_code=429,
-                content={"detail": "Daily quota exceeded"},
+                content=_rejection_body(request, 429, "Daily quota exceeded", {"detail": "Daily quota exceeded"}),
                 headers={"X-Request-ID": request_id},
             )
         elif today_count >= int(quota * 0.8):
@@ -328,13 +360,18 @@ async def proxy_request(request: Request):
         )
         return JSONResponse(
             status_code=503,
-            content={
-                "error": {
-                    "message": "No model is currently active or ready",
-                    "type": "model_unavailable",
-                    "code": "model_unavailable",
-                }
-            },
+            content=_rejection_body(
+                request,
+                503,
+                "No model is currently active or ready",
+                {
+                    "error": {
+                        "message": "No model is currently active or ready",
+                        "type": "model_unavailable",
+                        "code": "model_unavailable",
+                    }
+                },
+            ),
             headers={"X-Request-ID": request_id},
         )
 
@@ -438,10 +475,16 @@ async def proxy_request(request: Request):
                 mark_not_ready(target_model_id)
                 status = 502
                 error_kind = "container_missing"
-                body_msg = b'{"detail":"Model container is not registered; still starting or misconfigured."}'
+                message = "Model container is not registered; still starting or misconfigured."
             else:
                 status = 503
                 error_kind = "upstream_unreachable"
+                message = "SGFleet model is not ready, please try again"
+            if request.url.path == "/v1/messages":
+                body_msg = json.dumps(_anthropic_error_body(status, message)).encode()
+            elif dns_failure:
+                body_msg = b'{"detail":"Model container is not registered; still starting or misconfigured."}'
+            else:
                 body_msg = b'{"detail":"SGFleet model is not ready, please try again"}'
             asyncio.create_task(
                 audit_log.log_request(

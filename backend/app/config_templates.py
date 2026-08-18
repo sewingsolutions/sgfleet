@@ -73,9 +73,19 @@ def build_cursor_checklist(api_key, model_alias, model_name, base_url, context_l
     ]
 
 
+def _claude_base_url(base_url):
+    # Claude Code appends /v1/messages itself, so ANTHROPIC_BASE_URL must be the
+    # gateway origin. The stored sgfleet_base_url may carry a trailing /v1 (the
+    # setup wizard example does), so strip it to avoid /v1/v1/messages.
+    url = base_url.rstrip("/")
+    if url.endswith("/v1"):
+        url = url[: -len("/v1")]
+    return url
+
+
 def build_claude_code_config(api_key, model_alias, model_name, base_url, context_length, max_output_length):
     config = f"""export ANTHROPIC_API_KEY={shlex.quote(api_key)}
-export ANTHROPIC_BASE_URL={shlex.quote(f"{base_url}/v1")}
+export ANTHROPIC_BASE_URL={shlex.quote(_claude_base_url(base_url))}
 # Model: {model_alias}
 npx @anthropic-ai/claude-code@latest --model {shlex.quote(model_alias)}"""
     return config

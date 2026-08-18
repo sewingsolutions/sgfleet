@@ -41,7 +41,7 @@ def client(mock_setup_complete):
         app.config.settings.db_path = tmp_path
         from app.main import app
 
-        with TestClient(app) as c:
+        with patch("app.main.ensure_models_sync", AsyncMock(return_value=set())), TestClient(app) as c:
             yield c
     finally:
         os.unlink(tmp_path)
