@@ -165,8 +165,22 @@ class TestClaudeCodeConfig:
         assert f"export ANTHROPIC_API_KEY={API_KEY}" in result
 
     def test_contains_base_url_export(self):
+        # BASE_URL is /v1-suffixed (matches the setup wizard / stored value); the
+        # exported ANTHROPIC_BASE_URL must be the origin so Claude Code's own
+        # /v1/messages suffix resolves correctly.
         result = build_claude_code_config(API_KEY, MODEL_ALIAS, MODEL_NAME, BASE_URL, CONTEXT, OUTPUT)
-        assert f"export ANTHROPIC_BASE_URL={BASE_URL}/v1" in result
+        base_url_line = next(
+            line for line in result.splitlines() if line.strip().startswith("export ANTHROPIC_BASE_URL=")
+        )
+        assert base_url_line.strip() == "export ANTHROPIC_BASE_URL=https://api.example.com"
+        assert "/v1/v1" not in result
+
+    def test_base_url_without_v1_is_unchanged(self):
+        result = build_claude_code_config(API_KEY, MODEL_ALIAS, MODEL_NAME, "https://api.example.com", CONTEXT, OUTPUT)
+        base_url_line = next(
+            line for line in result.splitlines() if line.strip().startswith("export ANTHROPIC_BASE_URL=")
+        )
+        assert base_url_line.strip() == "export ANTHROPIC_BASE_URL=https://api.example.com"
 
     def test_contains_model_flag(self):
         result = build_claude_code_config(API_KEY, MODEL_ALIAS, MODEL_NAME, BASE_URL, CONTEXT, OUTPUT)
