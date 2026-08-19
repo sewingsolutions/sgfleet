@@ -3,7 +3,7 @@
 ## Setup
 
 ```bash
-git clone https://github.com/joesew/sgfleet.git
+git clone https://github.com/sewingsolutions/sgfleet.git
 cd sgfleet
 
 # Backend
@@ -28,10 +28,11 @@ Contributions that improve the existing single-node Docker + SGLang workflow —
 
 ## Before submitting
 
-- Backend: `ruff check app/` and `python3 -m pytest tests/` pass
-- Frontend: `npm run lint` and `npx vitest run` pass
+- Backend: `ruff check app/ tests/`, `ruff format --check app/ tests/`, and `python3 -m pytest tests/` pass
+- Frontend: `npm run lint`, `npx vitest run`, and `npm run format:check` pass
+- Shell scripts, Dockerfiles, YAML, and JSON: `npx prettier --check` passes on the files you touched (file list in AGENTS.md → Formatting)
 - No untracked secrets in `.env` (already in `.gitignore`)
-- Run `cd backend && ./deploy.sh` locally to confirm the change deploys
+- Run `cd backend && ./deploy.sh` locally to confirm the change deploys (and `cd frontend && ./deploy.sh` for frontend changes)
 
 ## Pull requests
 
