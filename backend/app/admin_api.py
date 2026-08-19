@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from . import audit as audit_log
 from . import metrics as real_metrics
 from . import webhooks as webhook_notify
-from .auth import require_admin
+from .auth import require_admin, require_admin_or_user
 from .config import generate_key, settings
 from .db import (
     bootstrap_models_from_json,
@@ -1027,6 +1027,7 @@ async def get_git_log(request: Request):
     Commit log file (GIT_LOG.txt) is generated alongside it and bundled
     into the container image.
     """
+    await require_admin_or_user(request)
     app_dir = os.path.dirname(__file__)
     version_file = os.path.join(app_dir, "VERSION.txt")
     gitlog_file = os.path.join(app_dir, "GIT_LOG.txt")

@@ -2,7 +2,7 @@
 ## Models Page
 ![models](./screenshots/sgfleet-models.png)
 
-## Nodel config Page
+## Model config Page
 ![modelsConfig](./screenshots/sgfleet-model-config.png)
 ![modelsConfig](./screenshots/sgfleet-model-config-2.png)
 ## Generate Config Page

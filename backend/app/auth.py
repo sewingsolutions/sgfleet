@@ -147,3 +147,11 @@ async def require_user(request: Request):
         raise HTTPException(status_code=401, detail="Invalid user session")
 
     request.state.user = user
+
+
+async def require_admin_or_user(request: Request):
+    """Accept an admin session (Bearer key or cookie) or a user session cookie."""
+    if request.headers.get("authorization", "").startswith("Bearer ") or request.cookies.get(_COOKIE_NAME):
+        await require_admin(request)
+        return
+    await require_user(request)

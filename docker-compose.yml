@@ -1,6 +1,10 @@
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+        GIT_LOG: ${GIT_LOG:-}
     container_name: sgfleet-backend
     restart: unless-stopped
     deploy:

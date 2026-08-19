@@ -155,3 +155,68 @@ async def test_require_user_inactive_user_raises():
 
     with pytest.raises(HTTPException, match="User not found or inactive"):
         await require_user(MockRequestInactive())  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_require_admin_or_user_accepts_user_cookie():
+    from app.auth import require_admin_or_user
+
+    await create_user("admin_or_user_test", "sk-admin-or-user")
+    await mark_setup_complete()
+    user = await get_user_by_name("admin_or_user_test")
+    token = create_user_session_token(cast(dict, user)["id"], "sk-admin-or-user")
+
+    mock_state_ou = cast(dict, {"user": None})
+
+    class MockStateOU:
+        def __setattr__(self, name: str, value: None | dict = None):
+            mock_state_ou[name] = value
+
+    class MockRequestOU:  # type: ignore
+        cookies = {_USER_COOKIE_NAME: token}
+        headers = {}
+        state = MockStateOU()
+        method = "GET"
+        url = type("URL", (), {"path": "/test"})()
+        client = type("Client", (), {"host": "127.0.0.1"})()
+
+    await require_admin_or_user(MockRequestOU())  # type: ignore[arg-type]
+    assert mock_state_ou["user"] is not None
+    assert mock_state_ou["user"]["name"] == "admin_or_user_test"
+
+
+@pytest.mark.asyncio
+async def test_require_admin_or_user_accepts_admin_bearer():
+    from app.auth import require_admin_or_user
+    from app.db import set_admin_credentials
+
+    await set_admin_credentials("admin", "sk-admin-or-admin")
+
+    class MockRequestAdmin:  # type: ignore
+        cookies = {}
+        headers = {"authorization": "Bearer sk-admin-or-admin"}
+        state = object()
+        method = "GET"
+        url = type("URL", (), {"path": "/test"})()
+        client = type("Client", (), {"host": "127.0.0.1"})()
+
+    await require_admin_or_user(MockRequestAdmin())  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_require_admin_or_user_anonymous_raises():
+    from app.auth import require_admin_or_user
+    from fastapi import HTTPException
+
+    await mark_setup_complete()
+
+    class MockRequestAnon:  # type: ignore
+        cookies = {}
+        headers = {}
+        state = object()
+        method = "GET"
+        url = type("URL", (), {"path": "/test"})()
+        client = type("Client", (), {"host": "127.0.0.1"})()
+
+    with pytest.raises(HTTPException):
+        await require_admin_or_user(MockRequestAnon())  # type: ignore[arg-type]

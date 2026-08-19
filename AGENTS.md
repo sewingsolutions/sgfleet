@@ -28,7 +28,7 @@ SGFleet LLM inference gateway with dynamic model management, API gateway, user m
 ### Starting a specific model container manually
 ```bash
 docker run -d --name sgfleet-gpt-oss-20b --network sgfleet_default --network-alias sgfleet-gpt-oss-20b \
-  --gpus all --shm-size 32g --ipc host --privileged --restart unless-stopped \
+  --gpus all --shm-size 32g --ipc host --cap-add SYS_NICE --restart unless-stopped \
   -v YOUR_MODELS_PATH/vllm_models:/models lmsysorg/sglang:v0.5.16 \
   sglang serve --model-path /models/gpt-oss-20b --host 0.0.0.0 --port 30000 [flags...]
 ```

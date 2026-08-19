@@ -39,6 +39,14 @@ def _record_login_attempt(ip: str) -> None:
     _login_attempts.setdefault(ip, []).append(time.time())
 
 
+async def _cookie_secure() -> bool:
+    """Session cookies are Secure when the configured base URL is HTTPS."""
+    from .hf_downloader import get_sgfleet_base_url
+
+    base_url = await get_sgfleet_base_url() or ""
+    return base_url.startswith("https://")
+
+
 @router.get("/login")
 async def login_get():
     return RedirectResponse(url="/login/", status_code=301)
@@ -71,6 +79,7 @@ async def login_post(request: Request):
             key=_COOKIE_NAME,
             value=token,
             httponly=True,
+            secure=await _cookie_secure(),
             max_age=_SESSION_MAX_AGE,
             path="/",
             samesite="lax",
@@ -87,6 +96,7 @@ async def login_post(request: Request):
             key=_USER_COOKIE_NAME,
             value=token,
             httponly=True,
+            secure=await _cookie_secure(),
             max_age=_SESSION_MAX_AGE,
             path="/",
             samesite="lax",
