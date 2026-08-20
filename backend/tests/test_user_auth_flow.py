@@ -27,6 +27,39 @@ async def test_login_user_token_redirects_to_user():
 
 
 @pytest.mark.asyncio
+async def test_login_admin_cookie_secure_flag_matches_scheme():
+    """Session cookie Secure flag follows X-Forwarded-Proto, not the configured base URL."""
+    import app.admin_ui
+    from app.db import set_admin_credentials
+
+    await set_admin_credentials("admin", "sk-secure-flag-test")
+    client = TestClient(app.admin_ui.router)
+
+    resp = client.post(
+        "/login",
+        data={"key": "sk-secure-flag-test"},
+        headers={"x-forwarded-proto": "https"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "/admin/" in resp.headers["location"]
+    set_cookie = resp.headers["set-cookie"]
+    assert "admin_session=" in set_cookie
+    assert "secure" in set_cookie.lower()
+
+    resp_http = client.post(
+        "/login",
+        data={"key": "sk-secure-flag-test"},
+        headers={"x-forwarded-proto": "http"},
+        follow_redirects=False,
+    )
+    assert resp_http.status_code == 302
+    set_cookie_http = resp_http.headers["set-cookie"]
+    assert "admin_session=" in set_cookie_http
+    assert "secure" not in set_cookie_http.lower()
+
+
+@pytest.mark.asyncio
 async def test_login_invalid_key_redirects_back():
     import app.admin_ui
 
