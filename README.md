@@ -1,9 +1,9 @@
 # SGFleet
-SGFleet is a self-hosted AI gateway and container orchestrator built specifically for SGLang. 
+SGFleet is a self-hosted AI gateway and container orchestrator built specifically for SGLang.
 Manage users, quotas, Hugging Face models, and GPU Docker containers from a single Web UI.
 Currently supports Nvidia GPUs.
 
-Supports generation of config for Opencode. Other tools like Cursor, Aider, and custom multi-agent scripts can also use the OpenAI-compatible endpoints. Implementation of generators for that is in progress.
+The gateway exposes OpenAI-compatible and Anthropic-compatible endpoints, and every user can generate ready-to-paste client configs from their own portal (OpenCode, Continue.dev, Cline/Roo Code, Open Interpreter, Cursor, Claude Code).
 
 ## Architecture
 
@@ -25,6 +25,38 @@ Client ──▶ sgfleet-frontend:80 (nginx) ──▶ sgfleet-backend:8000 (Fas
 | backend | (internal) | FastAPI gateway, admin API, dynamic model orchestration |
 | alloy | 12345 (internal) | Grafana Alloy → external Prometheus (profile `monitoring`) |
 | sgfleet-* | 30000 (internal) | Model containers, started/stopped dynamically by backend |
+
+## Features
+
+**Gateway**
+- OpenAI-compatible API (`/v1/chat/completions`, `/v1/models`, …) plus Anthropic-compatible `/v1/messages` for Claude Code, with matching error formats
+- Auth via `Authorization: Bearer <key>` or `X-API-Key` header
+- Per-user rate limit (token bucket), concurrent request limit, and daily quota; a `quota_warning` webhook fires at 80% of the daily quota
+- Per-model access control and per-user default model routing
+- Streaming responses with token-usage extraction from both OpenAI and Anthropic SSE formats, used for cost and quota tracking
+
+**Users**
+- Per-user API keys (`sk-…`) with rotation; looked up by SHA256 index + bcrypt verification
+- Per-user rate limit, max concurrent, request cost, and optional daily quota
+- Per-user model assignment and default model; bulk editing and JSON import of users
+
+**User portal** (`/user`)
+- Login with your own API key; dashboard with usage stats and line charts (requests, tokens) over time
+- Quota & usage, request history, and authorized-models views
+- Self-service config generation for your key and API key rotation
+
+**Config generator** (admin UI and user portal)
+- OpenCode, Continue.dev, Cline/Roo Code, Open Interpreter, Cursor (step-by-step checklist), Claude Code (shell env via the Anthropic endpoint)
+
+**Admin dashboard** (`/admin`)
+- Dashboard with fleet stats and request metrics (line charts)
+- Model management: add/edit/delete, GPU assignment, environment variables, command flags, start/stop/toggle, test prompt, live container logs, per-field version history with revert
+- Model export/import as JSON; model download page with HuggingFace search (VRAM filter), disk-space check, live download progress, and auto-generated model entries
+- User management: create/edit/delete, model access, default model, key rotation, import
+- Webhooks with per-webhook event subscription, HMAC-SHA256 signed payloads
+- Audit log of admin actions, request log viewer with adjustable log level
+- Settings: default rate limit / concurrency / cost, base URL, HF token, admin key rotation, full database export
+- Release notes page showing the running build's commit log
 
 ## Models
 
@@ -93,14 +125,15 @@ User API keys are stored in the SQLite `users` table as a bcrypt hash (for O(1) 
 
 ## Data flow (gateway)
 
-1. Client sends `Authorization: Bearer <api_key>` to `/v1/chat/completions`
+1. Client sends `Authorization: Bearer <api_key>` (or `X-API-Key`) to `/v1/*` (OpenAI-compatible) or `/v1/messages` (Anthropic-compatible)
 2. Gateway verifies key (SHA256 quick hash + bcrypt), checks rate limit (token bucket) and concurrent limit
-3. Checks daily quota against `user_usage` table
+3. Checks daily quota against `user_usage` table (fires `quota_warning` webhook at 80%)
 4. Routes to model: request body `model` field → user default model → first active model
 5. Per-model access control: restricted users can only access assigned models
-6. Proxies to active model container with streaming response
-7. On success: fire-and-forget usage tracking
-8. If no active model ready: returns 503
+6. Proxies to the model container with streaming response
+7. On success: extracts token usage (including from SSE streams) and tracks cost/quota fire-and-forget
+8. If no active model ready: returns 503 (Anthropic-shaped error body on `/v1/messages`)
+9. On upstream DNS failure the model is dropped from the ready set until its next health check
 
 ## Model Management
 
@@ -109,6 +142,8 @@ Models are stored in SQLite and bootstrapped from `models.json` on first run. A 
 - `POST /admin/api/models/{id}/toggle` — flip active flag + full container sync
 - `POST /admin/api/models/{id}/start` — start container + health-wait
 - `POST /admin/api/models/{id}/stop` — stop container
+
+The admin UI builds on these: add/edit/delete models (image, path, GPU assignment, environment variables, command flags, context length), per-field version history with one-click revert, a test-prompt endpoint, live container log streaming, health status, and JSON export/import of the full model set. The model download page can auto-generate a model entry from HuggingFace metadata (image, flags, VRAM-based context length) after a download completes.
 
 ## Developing
 
