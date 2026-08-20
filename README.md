@@ -105,6 +105,14 @@ On startup, backend:
 ## Screenshots
 Have a look at [SCREENSHOTS.md](SCREENSHOTS.md) for a visual overview of the admin dashboard and model management.
 
+### Admin UI tour
+
+![Admin UI tour](screenshots/admin.gif)
+
+### User UI tour
+
+![User UI tour](screenshots/user.gif)
+
 ## Components
 
 - **backend/** — Python backend (gateway, admin API, metrics, auth, DB, model lifecycle)
